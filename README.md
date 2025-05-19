@@ -18,40 +18,44 @@ pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
 ### 基本的な使い方
 
 ```python
+#!/usr/bin/env python3
+import argparse
+import sys
+from pathlib import Path
+from typing import Dict, Any, List, Tuple
+
+# ASEのインポート
+from ase.build import fcc111, fcc100
+
+# ORR過電圧計算関数をインポート
 from orr_overpotential_calculator import calc_orr_overpotential
-from ase.build import fcc111
 
-# バルク構造の設定
-bulk = fcc111("Pt", size=(3, 3, 4), a=4.0, vacuum=None, periodic=True)
+#---------------------
+# 引数の設定
+base_dir = "result/RPBE/Pt111"
+force = True
+log_level = "INFO"
+calc_type = "vasp"
+#----------------
 
-# 過電圧の計算 (デフォルトの吸着サイト)
-eta = calc_orr_overpotential(
-    bulk=bulk,
-    base_dir="results",
-    calc_type="vasp" # または "mattersim"
-)
+bulk = fcc111("Pt", size=(4, 4, 4), a=4.0, vacuum=None, periodic=True)
 
-print(f"ORR overpotential: {eta:.3f} V")
-```
-
-### カスタム吸着サイトの指定
-
-```python
-from typing import Dict, List, Tuple
-
-# 吸着サイトのカスタマイズ
 orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
-    "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],  # ontop, bridge, hollow
+    "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)], #ontop, bridge, hollow
     "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
     "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
 }
 
 eta = calc_orr_overpotential(
     bulk=bulk,
-    base_dir="results",
-    calc_type="vasp",
-    adsorbates=orr_adsorbates
+    base_dir=base_dir,
+    force=force,
+    log_level=log_level,
+    calc_type=calc_type,
+    adsorbates=orr_adsorbates,
 )
+
+print(f"ORR overpotential: {eta:.3f} V")
 ```
 
 ## 依存パッケージ
