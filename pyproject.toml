@@ -8,10 +8,9 @@ version = "0.1.0"
 description = "Calculator for ORR overpotential"
 requires-python = ">=3.6"
 dependencies = [
-    "numpy",
-    "ase",
     "matplotlib",
-    "mattersim"
+    "mattersim",
+    "ase",
 ]
 
 [tool.setuptools]
