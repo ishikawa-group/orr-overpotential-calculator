@@ -28,3 +28,22 @@ ENV/
 .idea/
 .vscode/
 *.swp
+
+# example ディレクトリ内のファイル管理
+/example/*
+!/example/*/
+/example/*/*
+!/example/*/*/
+/example/*/*/*
+!/example/*/*/*/
+/example/*/*/*/*
+!/example/*/*/*/*/
+/example/*/*/*/*/*
+!/example/*/*/*/*/*/
+
+# 追跡したいファイル形式のみ許可
+!/example/**/*.py
+!/example/**/*.sh
+!/example/**/*.json
+!/example/**/*.png
+!/example/**/*.txt

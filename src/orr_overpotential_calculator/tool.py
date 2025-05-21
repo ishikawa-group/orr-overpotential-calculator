@@ -158,7 +158,7 @@ def auto_lmaxmix(atoms):
 def my_calculator(
         atoms, kind:str, 
         calc_type:str="mattersim", 
-        yaml_path:str="/gs/fs/tga-ishikawalab/wakamiya/ORR_catalyst_generator/code/vasp.yaml",
+        yaml_path:str="data/vasp.yaml",
         calc_directory:str="calc"): 
     """
     Create calculator instance based on parameters from YAML file and attach to atoms.

@@ -2,9 +2,9 @@
 #$ -cwd
 #$ -l cpu_160=1
 #$ -l h_rt=24:00:00
-#$ -N ORR_Ir111
-#$ -o /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/Ir111/log/RPBE_output.log
-#$ -e /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/Ir111/log/RPBE_error.log
+#$ -N ORR_Pt111
+#$ -o /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/Pt111/log/RPBE_output.log
+#$ -e /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/Pt111/log/RPBE_error.log
 
 # Load required modules
 module load intel
