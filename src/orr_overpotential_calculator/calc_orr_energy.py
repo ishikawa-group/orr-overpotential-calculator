@@ -51,13 +51,13 @@ ADS_HEIGHT    = 2.0       # Å
 # ----------------------------------------------------------------------
 # calculation settings
 # ----------------------------------------------------------------------
-def optimize_gas(mol_name: str, gas_box: float, work_dir: str, calc_type: str = "mattersim") -> Tuple[Atoms, float]:
+def optimize_gas(mol_name: str, gas_box: float, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
     mol = MOLECULES[mol_name].copy()
     mol.set_cell([gas_box, gas_box, gas_box])
     mol.set_pbc(True)
     mol.center()
     mol = set_initial_magmoms(mol, kind="gas", formula=mol_name)
-    opt_mol = my_calculator(mol, "gas", calc_type=calc_type, yaml_path=YAML_PATH, calc_directory=work_dir)
+    opt_mol = my_calculator(mol, "gas", calc_type=calc_type, yaml_path=yaml_path, calc_directory=work_dir)
     if mol_name in CLOSED_SHELL:
         calc = opt_mol.calc
         calc.set(ispin=1)
@@ -65,27 +65,27 @@ def optimize_gas(mol_name: str, gas_box: float, work_dir: str, calc_type: str = 
     E_opt_gas = opt_mol.get_potential_energy()
     return opt_mol, E_opt_gas
 
-def optimize_bulk(bulk: Atoms, work_dir: str, calc_type: str = "mattersim") -> Tuple[Atoms, float]:
+def optimize_bulk(bulk: Atoms, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
     bulk_atoms = bulk.copy()
     bulk_atoms.set_pbc(True)
     bulk_atoms = set_initial_magmoms(bulk_atoms, kind="bulk")
-    opt_bulk = my_calculator(bulk_atoms, "bulk", calc_type=calc_type, yaml_path=YAML_PATH, calc_directory=work_dir)
+    opt_bulk = my_calculator(bulk_atoms, "bulk", calc_type=calc_type, yaml_path=yaml_path, calc_directory=work_dir)
     auto_lmaxmix(opt_bulk)
     E_opt_bulk = opt_bulk.get_potential_energy()
     return opt_bulk, E_opt_bulk
 
-def optimize_slab(opt_bulk: Atoms, work_dir: str, calc_type: str = "mattersim") -> Tuple[Atoms, float]:
+def optimize_slab(opt_bulk: Atoms, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
     slab = opt_bulk.copy()
     slab.set_pbc(True)
     slab = parallel_displacement(slab, vacuum=SLAB_VACUUM)
     slab = fix_lower_surface(slab)
     slab = set_initial_magmoms(slab, kind="slab")
-    opt_slab = my_calculator(slab, "slab", calc_type=calc_type, yaml_path=YAML_PATH, calc_directory=work_dir)
+    opt_slab = my_calculator(slab, "slab", calc_type=calc_type, yaml_path=yaml_path, calc_directory=work_dir)
     auto_lmaxmix(opt_slab)
     E_opt_slab = opt_slab.get_potential_energy()
     return opt_slab, E_opt_slab
 
-def calc_adsorption_on_site(opt_slab:Atoms, opt_mol: Atoms, site: str, work_dir: str, calc_type: str = "mattersim") -> Tuple[float, float]:
+def calc_adsorption_on_site(opt_slab:Atoms, opt_mol: Atoms, site: str, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[float, float]:
     """指定したサイトでの吸着構造を最適化し、エネルギーと時間を返す"""
     print(f"   Site: {site}")
     site_dir = os.path.join(work_dir, f"site_{site}") # ディレクトリ名を変更
@@ -114,7 +114,7 @@ def calc_adsorption_on_site(opt_slab:Atoms, opt_mol: Atoms, site: str, work_dir:
     add_adsorbate(slab_ads, ads, height=ADS_HEIGHT, position=site)
 
     # 計算機を設定 (my_calculatorは最適化を実行しない前提)
-    slab_ads_calc = my_calculator(slab_ads, "slab", calc_type=calc_type, yaml_path=YAML_PATH, calc_directory=site_dir) # 出力先をサイトディレクトリに
+    slab_ads_calc = my_calculator(slab_ads, "slab", calc_type=calc_type, yaml_path=yaml_path, calc_directory=site_dir) # 出力先をサイトディレクトリに
 
     # エネルギー計算
     E_opt_slab_ads = slab_ads_calc.get_potential_energy()
@@ -135,6 +135,7 @@ def calc_adsorption_with_offset(
     offset: Tuple[float, float],
     work_dir: str,
     calc_type: str = "mattersim",
+    yaml_path: str = YAML_PATH,
 ) -> Tuple[float, float]:
 
     import os, time
@@ -171,7 +172,7 @@ def calc_adsorption_with_offset(
     calc = my_calculator(slab_ads,
                          "slab",
                          calc_type=calc_type,
-                         yaml_path=YAML_PATH,
+                         yaml_path=yaml_path,
                          calc_directory=work_dir)
     E_total = calc.get_potential_energy()
 
@@ -184,7 +185,7 @@ def calc_adsorption_with_offset(
     return float(E_total), dt
 
 
-def calculate_all_molecules(opt_slab: Atoms, E_opt_slab: float, calc_type: str = "mattersim") -> Dict[str, Any]:
+def calculate_all_molecules(opt_slab: Atoms, E_opt_slab: float, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Dict[str, Any]:
     """MOLECULESに含まれる全ての分子について吸着エネルギー計算を実行する"""
 
     # 結果を保存する辞書
@@ -208,13 +209,13 @@ def calculate_all_molecules(opt_slab: Atoms, E_opt_slab: float, calc_type: str =
         try:
             # 1. ガス分子の構造最適化 (毎回実行)
             print(f"1) Optimizing {mol_name} gas molecule...")
-            opt_mol, E_opt_gas = optimize_gas(mol_name, GAS_BOX, gas_dir, calc_type)
+            opt_mol, E_opt_gas = optimize_gas(mol_name, GAS_BOX, gas_dir, calc_type, yaml_path)
 
             # 2. 各サイトでの吸着エネルギー計算
             print(f"2) Calculating adsorption energies at different sites...")
             sites_data = {}
             for site in SITES:
-                E_total, elapsed_time = calc_adsorption_on_site(opt_slab, opt_mol, site, ads_dir, calc_type)
+                E_total, elapsed_time = calc_adsorption_on_site(opt_slab, opt_mol, site, ads_dir, calc_type, yaml_path)
                 sites_data[site] = {
                     "E_total": E_total,
                     "elapsed time(s)": elapsed_time
@@ -276,14 +277,14 @@ if __name__ == "__main__":
     # 1. バルクの構造最適化 (最初に一度だけ)
     print("1) Optimizing Pt bulk...")
     Pt111 = fcc111("Pt", size=(4,4,4), a=4.0, vacuum=None, periodic=True)
-    opt_bulk, E_opt_bulk = optimize_bulk(Pt111, bulk_dir, calc_type)
+    opt_bulk, E_opt_bulk = optimize_bulk(Pt111, bulk_dir, calc_type, YAML_PATH)
 
     # 2. スラブの構造最適化 (最初に一度だけ)
     print("2) Optimizing Pt(111) slab...")
-    opt_slab, E_opt_slab = optimize_slab(opt_bulk, slab_dir, calc_type)
+    opt_slab, E_opt_slab = optimize_slab(opt_bulk, slab_dir, calc_type, YAML_PATH)
 
     # 3. 全分子の吸着計算を実行
-    results = calculate_all_molecules(opt_slab, E_opt_slab, calc_type)
+    results = calculate_all_molecules(opt_slab, E_opt_slab, calc_type, YAML_PATH)
 
     # 4. 結果の簡単なサマリーを表示
     print("\n=== 計算結果サマリー ===")

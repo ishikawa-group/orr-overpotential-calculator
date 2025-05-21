@@ -16,6 +16,7 @@ base_dir = str(Path(__file__).parent / "Pt111")
 force = True
 log_level = "INFO"
 calc_type = "vasp"
+yaml_path = str(Path(__file__).parent / "vasp.yaml")
 #----------------
 
 bulk = fcc111("Pt", size=(3, 3, 4), a=4.0, vacuum=None, periodic=True)
@@ -33,6 +34,7 @@ eta = calc_orr_overpotential(
     log_level=log_level,
     calc_type=calc_type,
     adsorbates=orr_adsorbates,
+    yaml_path=yaml_path
 )
 
 print(f"ORR overpotential: {eta:.3f} V")

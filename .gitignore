@@ -43,6 +43,7 @@ ENV/
 
 # 追跡したいファイル形式のみ許可
 !/example/**/*.py
+!/example/**/*.yaml
 !/example/**/*.sh
 !/example/**/*.json
 !/example/**/*.png

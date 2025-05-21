@@ -72,6 +72,7 @@ def calculate_required_molecules(
     force: bool = False,
     calc_type: str = "mattersim",
     adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    yaml_path: str = None,
 ) -> Dict[str, Any]:
 
     results: Dict[str, Any] = {}
@@ -93,7 +94,7 @@ def calculate_required_molecules(
         gas_json  = gas_dir / "opt_result.json"
         xyz_gas   = gas_dir / "opt.xyz"
 
-        opt_mol, E_gas = optimize_gas(mol_name, GAS_BOX, str(gas_dir), calc_type)
+        opt_mol, E_gas = optimize_gas(mol_name, GAS_BOX, str(gas_dir), calc_type, yaml_path)
         opt_mol.write(xyz_gas)
         json.dump({"E_opt": float(E_gas)}, gas_json.open("w"))
         
@@ -118,7 +119,7 @@ def calculate_required_molecules(
                 elapsed = data["elapsed"]
             else:
                 E_total, elapsed = calc_adsorption_with_offset(
-                    opt_slab, opt_mol, ofst, str(work_dir), calc_type
+                    opt_slab, opt_mol, ofst, str(work_dir), calc_type, yaml_path
                 )
                 json.dump({"E_total": E_total,
                            "elapsed": elapsed}, ofst_json.open("w"))
@@ -210,9 +211,8 @@ def get_overpotential_orr(
 
     # ZPE (eV) ---------------------------------------------------------------
     zpe = {
-        "H2": 0.27, "H2O": 0.56,
-        "O2": 0.05 * 2,
-        "O2ads": 0.0, "Oads": 0.07, "OHads": 0.36, "OOHads": 0.40,
+        "H2": 0.27, "H2O": 0.56, "O2": 0.05 * 2,
+        "Oads": 0.07, "OHads": 0.36, "OOHads": 0.40, "O2ads": 0.0,
     }
     # entropy term T*S -------------------------------------------------------
     S = {
@@ -299,6 +299,7 @@ def calc_orr_overpotential(
     log_level: str = "INFO",
     calc_type: str = "mattersim",
     adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    yaml_path: str = None,
 ) -> float:
     """
     Entry point : bulk → (slab, ads) → ΔE → η
@@ -317,17 +318,17 @@ def calc_orr_overpotential(
 
     # 1. bulk optimisation
     logger.info("Optimising bulk …")
-    opt_bulk, E_bulk = optimize_bulk(bulk, str(base_path / "bulk"), calc_type)
+    opt_bulk, E_bulk = optimize_bulk(bulk, str(base_path / "bulk"), calc_type, yaml_path)
 
     # 2. clean-slab optimisation
     logger.info("Optimising clean slab …")
-    opt_slab, E_slab = optimize_slab(opt_bulk, str(base_path / "slab"), calc_type)
+    opt_slab, E_slab = optimize_slab(opt_bulk, str(base_path / "slab"), calc_type, yaml_path)
 
     # 3. gas + adsorption calculations (offset scheme)
     logger.info("Running required molecule calculations …")
     results = calculate_required_molecules(
         opt_slab, E_slab, base_path,
-        force=force, calc_type=calc_type, adsorbates=adsorbates,
+        force=force, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
     )
 
     # 4. ΔE & over-potential
@@ -356,11 +357,13 @@ def main():
     p.add_argument("--force",  action="store_true")
     p.add_argument("--log",    default="INFO")
     p.add_argument("--calc-type", default="mattersim")
+    p.add_argument("--yaml-path", default=None, help="Path to VASP configuration YAML file")
     args = p.parse_args()
 
     bulk = fcc111("Pt", size=(5, 5, 4), a=4.0, vacuum=None, periodic=True)
     eta = calc_orr_overpotential(
-        bulk, args.base_dir, args.force, args.log, args.calc_type
+        bulk, args.base_dir, args.force, args.log, args.calc_type,
+        adsorbates=None, yaml_path=args.yaml_path  # yaml_pathを追加
     )
     print(f"η_ORR = {eta:.3f} V")
     return eta
