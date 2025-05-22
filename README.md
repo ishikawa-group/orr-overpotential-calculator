@@ -10,7 +10,6 @@ pip install git+https://github.com/ishikawa-group/orr_overpotential_calculator.g
 
 # ビルド済みwheelからインストール
 pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
-
 ```
 
 ## 使用方法
@@ -74,3 +73,12 @@ print(f"ORR overpotential: {eta:.3f} V")
 - `log_level`: ログレベル（デフォルト: "INFO"）
 - `calc_type`: 計算タイプ（"vasp" または "mattersim"）
 - `adsorbates`: 吸着サイト定義（オプション）
+
+## 参考文献
+- Nørskov, J. K., Rossmeisl, J., Logadottir, A., & Lindqvist, L. (2004). Origin of the Overpotential for Oxygen Reduction at a Fuel-Cell Cathode. The Journal of Physical Chemistry B, 108(46), 17886-17892. https://doi.org/10.1021/jp047349j
+
+- Nair, A. S., & Pathak, B. (2019). Importance of Dispersion and Relativistic Effects for ORR Overpotential Calculation on Pt(111) surface. arXiv:1908.08697. https://doi.org/10.48550/arXiv.1908.08697
+
+- Bajdich, M., García-Mota, M., Vojvodic, A., Nørskov, J. K., & Bell, A. T. (2013). Theoretical Investigation of the Activity of Cobalt Oxides for the Electrochemical Oxidation of Water. Journal of the American Chemical Society, 135(36), 13521-13530. https://doi.org/10.1021/ja405997s
+
+- Daniel Martín Yerga. (2019). Practical introduction to DFT for Electrocatalysis – 1. Free energy diagrams. https://dyerga.org/blog/2019/02/09/practical-introduction-to-dft-for-electrocatalysis-1-free-energy-diagrams/

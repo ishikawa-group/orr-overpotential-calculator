@@ -4,9 +4,9 @@ common:
   encut: 450
   ismear: 0
   ibrion: 2
-  nsw: 200
+  nsw: 300
   ediff: 1.0e-5
-  ediffg: -5.0e-2
+  ediffg: -2.0e-2
   prec: Normal
   algo: Fast
   lreal: Auto

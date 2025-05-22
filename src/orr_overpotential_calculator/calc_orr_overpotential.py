@@ -172,6 +172,11 @@ def compute_reaction_energies(results: Dict[str, Any], E_slab: float) -> Tuple[L
     E_slab_O   = e_total("O")
     E_slab_OH  = e_total("OH")
 
+    # add solvent correction (https://doi.org/10.1016/j.cattod.2018.07.036, https://doi.org/10.1039/D0NR03339A)--------------------------
+    E_slab_OOH = E_slab_OOH - 0.25
+    E_slab_OH   = E_slab_OH  - 0.50
+    
+    # save energies to dict
     energies = {
         "E_H2_g":    E_H2_g,
         "E_H2O_g":   E_H2O_g,
@@ -210,14 +215,16 @@ def get_overpotential_orr(
     assert len(deltaEs) == rxn_num, "deltaEs must contain 4 elements"
 
     # ZPE (eV) ---------------------------------------------------------------
+    # https://doi.org/10.1021/ja405997s 
     zpe = {
-        "H2": 0.27, "H2O": 0.56, "O2": 0.05 * 2,
-        "Oads": 0.07, "OHads": 0.36, "OOHads": 0.40, "O2ads": 0.0,
+        "H2": 0.35, "H2O": 0.57,
+        "Oads": 0.06, "OHads": 0.37, "OOHads": 0.44,
     }
     # entropy term T*S -------------------------------------------------------
+    # https://doi.org/10.1021/ja405997s
     S = {
-        "H2": 0.41 / T, "H2O": 0.67 / T, "O2": 0.63 / T,
-        "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0, "O2ads": 0.0,
+        "H2": 0.403 / T, "H2O": 0.67 / T, 
+        "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
 
     zpe["O2"] = 0 + 2 * (zpe["H2O"] - zpe["H2"])
