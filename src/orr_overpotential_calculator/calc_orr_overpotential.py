@@ -29,6 +29,8 @@ from .calc_orr_energy import (
     optimize_bulk,
     optimize_slab,          # clean slab or slab+adsorbate ともに使う
     optimize_gas,
+    optimize_nanoparticle,
+    optimize_nanoparticle_gas,
     calc_adsorption_with_offset,
 )
 from .tool import convert_numpy_types
@@ -307,6 +309,7 @@ def calc_orr_overpotential(
     calc_type: str = "mattersim",
     adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     yaml_path: str = None,
+    Nano_particle: bool = False,
 ) -> float:
     """
     Entry point : bulk → (slab, ads) → ΔE → η
@@ -316,6 +319,7 @@ def calc_orr_overpotential(
         format="%(levelname)s: %(message)s",
         stream=sys.stdout,
     )
+    
     # 渡されない場合はグローバル変数を使用
     if adsorbates is None:
         adsorbates = ADSORBATES
@@ -352,6 +356,56 @@ def calc_orr_overpotential(
 
     return eta
 
+def calc_nanoparticle_orr_overpotential(
+    nanoparticle: Atoms,
+    base_dir: str = "result/matter_sim",
+    force: bool = False,
+    log_level: str = "INFO",
+    calc_type: str = "mattersim",
+    adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    yaml_path: str = None,
+    Nano_particle: bool = False,
+) -> float:
+    """
+    Entry point : bulk → (slab, ads) → ΔE → η
+    """
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(levelname)s: %(message)s",
+        stream=sys.stdout,
+    )
+    
+    # 渡されない場合はグローバル変数を使用
+    if adsorbates is None:
+        adsorbates = ADSORBATES
+
+    base_path = Path(base_dir).resolve()
+    base_path.mkdir(parents=True, exist_ok=True)
+
+    # 1. nanoparticle optimisation
+    logger.info("Optimising nanoparticle …")
+    opt_nanoparticle, E_nanoparticle = optimize_nanoparticle(nanoparticle, str(base_path / "nanoparticle"), calc_type, yaml_path)
+
+    # 2. gas + adsorption calculations (offset scheme)
+    logger.info("Running required molecule calculations …")
+    results = calculate_required_molecules(
+        opt_nanoparticle, E_nanoparticle, base_path,
+        force=force, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
+    )
+
+    # 4. ΔE & over-potential
+    deltaEs, energies = compute_reaction_energies(results, E_nanoparticle)
+    eta = get_overpotential_orr(deltaEs, base_path, verbose=True)
+
+    # 5. summary
+    with (base_path / "ORR_summary.txt").open("w") as f:
+        f.write("--- ORR Summary ---\n\n")
+        f.write(json.dumps(convert_numpy_types(energies), indent=2))
+        f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in deltaEs) + "\n")
+        f.write(f"Overpotential η = {eta:.3f} V\n")
+    logger.info("Summary written → %s", base_path / "ORR_summary.txt")
+
+    return eta
 # ---------------------------------------------------------------------------
 # main entry -----------------------------------------------------------------
 # ---------------------------------------------------------------------------

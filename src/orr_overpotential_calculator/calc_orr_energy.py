@@ -85,6 +85,24 @@ def optimize_slab(opt_bulk: Atoms, work_dir: str, calc_type: str = "mattersim", 
     E_opt_slab = opt_slab.get_potential_energy()
     return opt_slab, E_opt_slab
 
+def optimize_nanoparticle(nanoparticle: Atoms, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
+    nanoparticle_atoms = nanoparticle.copy()
+    nanoparticle_atoms.set_pbc(True)
+    nanoparticle_atoms = set_initial_magmoms(nanoparticle_atoms, kind="nanoparticle")
+    opt_nanoparticle = my_calculator(nanoparticle_atoms, "nanoparticle", calc_type=calc_type, yaml_path=yaml_path, calc_directory=work_dir)
+    auto_lmaxmix(opt_nanoparticle)
+    E_opt_nanoparticle = opt_nanoparticle.get_potential_energy()
+    return opt_nanoparticle, E_opt_nanoparticle
+
+def optimize_nanoparticle_gas(nanoparticle_gas: Atoms, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
+    nanoparticle_gas_atoms = nanoparticle_gas.copy()
+    nanoparticle_gas_atoms.set_pbc(True)
+    nanoparticle_gas_atoms = set_initial_magmoms(nanoparticle_gas_atoms, kind="nanoparticle_gas")
+    opt_nanoparticle_gas = my_calculator(nanoparticle_gas_atoms, "nanoparticle_gas", calc_type=calc_type, yaml_path=yaml_path, calc_directory=work_dir)
+    auto_lmaxmix(opt_nanoparticle_gas)
+    E_opt_nanoparticle_gas = opt_nanoparticle_gas.get_potential_energy()
+    return opt_nanoparticle_gas, E_opt_nanoparticle_gas
+
 def calc_adsorption_on_site(opt_slab:Atoms, opt_mol: Atoms, site: str, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[float, float]:
     """指定したサイトでの吸着構造を最適化し、エネルギーと時間を返す"""
     print(f"   Site: {site}")
