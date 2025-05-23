@@ -33,7 +33,7 @@ SITES         = ["ontop", "bridge", "fcc"]
 MOLECULES = {
     "OH" : Atoms("OH",  positions=[(0, 0, 0), (0, 0, 0.97)]),
     "H2O": Atoms("OHH", positions=[(0, 0, 0), (0.759, 0, 0.588), (-0.759, 0, 0.588)]),
-    "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, 0, 1.46), (0.939, 0, 1.705)]),  
+    "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),  
     "H2" : Atoms("HH",  positions=[(0, 0, 0), (0, 0, 0.74)]),
     "O2" : Atoms("OO",  positions=[(0, 0, 0), (0, 0, 1.21)]),
     "H"  : Atoms("H",   positions=[(0, 0, 0)]),
@@ -202,6 +202,83 @@ def calc_adsorption_with_offset(
     print(f"     E_total = {E_total:.6f} eV, Time = {dt:.2f} s")
     return float(E_total), dt
 
+def calc_adsorption_with_index(
+    opt_slab: Atoms,
+    opt_mol: Atoms,
+    indices: list,  # 原子インデックスのリスト (1-4個)
+    work_dir: str,
+    height: float = None,  # 高さを指定できるようにする
+    orientation: list = None,  # 配向も指定できるようにする
+    calc_type: str = "mattersim",
+    yaml_path: str = YAML_PATH,
+) -> Tuple[float, float]:
+    """
+    指定した原子インデックスに基づいて吸着分子を配置し、エネルギー計算を行う
+    
+    Parameters:
+        opt_slab: 最適化済みスラブ構造
+        opt_mol: 最適化済み分子構造
+        indices: 吸着サイトを定義する原子インデックスのリスト (1-4個)
+        work_dir: 計算ディレクトリ
+        height: 吸着高さ (Å) (Noneの場合はデフォルト値2.0Å)
+        orientation: 分子の配向ベクトル (Noneの場合は自動決定)
+        calc_type: 計算タイプ
+        yaml_path: VASP設定ファイルのパス
+        
+    Returns:
+        Tuple[float, float]: 全エネルギーと計算時間
+    """
+    import os, time
+    from pathlib import Path
+    from ase.io import write
+    import numpy as np
+    from orr_overpotential_calculator import place_adsorbate
+
+    os.makedirs(work_dir, exist_ok=True)
+    t0 = time.time()
+
+    # ---------- 1. スラブの準備 ----------------------------
+    slab = opt_slab.copy()
+    slab = set_initial_magmoms(slab, kind="slab")
+    slab.set_pbc(True)
+
+    # ---------- 2. 吸着分子の準備 --------------------
+    ads = opt_mol.copy()
+    ads = set_initial_magmoms(ads,
+                             kind="gas",
+                             formula=ads.get_chemical_formula())
+    ads.center()
+    ads.set_pbc(False)
+    ads.set_cell(None)
+
+    # ---------- 3. 吸着分子の配置 ----------------------------------
+    # place_adsorbate関数を使用して吸着分子を配置
+    slab_ads = place_adsorbate(
+        cluster=slab.copy(),
+        adsorbate=ads,
+        indices=indices,
+        height=height,  # Noneの場合、関数内でデフォルト値(2.0)が使用される
+        orientation=orientation
+    )
+    
+
+    # ---------- 4. 計算実行と結果取得 -----------------------------------
+    calc = my_calculator(slab_ads,
+                        "slab",
+                        calc_type=calc_type,
+                        yaml_path=yaml_path,
+                        calc_directory=work_dir)
+    E_total = calc.get_potential_energy()
+
+    # ---------- 5. 結果の保存 ---------------------------------
+    # インデックスをファイル名に含める
+    indices_str = "_".join(map(str, indices))
+    xyz_out = Path(work_dir).parent / f"idx_{indices_str}.xyz"
+    write(xyz_out, calc)
+
+    dt = time.time() - t0
+    print(f"     Site: {indices}, E_total = {E_total:.6f} eV, Time = {dt:.2f} s")
+    return float(E_total), dt
 
 def calculate_all_molecules(opt_slab: Atoms, E_opt_slab: float, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Dict[str, Any]:
     """MOLECULESに含まれる全ての分子について吸着エネルギー計算を実行する"""

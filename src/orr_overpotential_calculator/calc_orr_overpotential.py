@@ -41,7 +41,7 @@ from .tool import convert_numpy_types
 MOLECULES: Dict[str, Atoms] = {
     # adsorbates (gas + adsorption)
     "OH":  Atoms("OH",  positions=[(0, 0, 0), (0, 0, 0.97)]),
-    "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, 0.723, 1.264), (1.666, 0, 1.007)]), #(0, 0, 0), (0, 0, 1.46), (0.939, 0, 1.705)を30度回転
+    "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]), #(0, 0, 0), (0, 0, 1.46), (0.939, 0, 1.705)を30度回転
     "O":   Atoms("O",   positions=[(0, 0, 0)]),
     # gas-phase only
     "O2":  Atoms("OO",  positions=[(0, 0, 0), (0, 0, 1.21)]),
@@ -210,7 +210,7 @@ def get_overpotential_orr(
     output_dir: Path,
     T: float = 298.15,
     verbose: bool = False,
-) -> float:
+) -> Dict[str, Any]:
     """Return ORR overpotential η (V) and save free‑energy diagram."""
 
     rxn_num = 4  # 4‑electron pathway
@@ -299,7 +299,14 @@ def get_overpotential_orr(
         logger.info("Limiting potential U_L = %.3f V", U_L)
         logger.info("Overpotential η = %.3f V", eta)
 
-    return eta
+    return {
+        "eta": eta,
+        "diffG_U0": diffG_U0.tolist(),  # NumPy配列をリストに変換
+        "diffG_eq": diffG_eq.tolist(),
+        "U_L": U_L,
+        "G_profile_U0": G_profile_U0.tolist(),
+        "G_profile_Ueq": G_profile_Ueq.tolist()
+    }
 
 def calc_orr_overpotential(
     bulk: Atoms,
@@ -310,7 +317,7 @@ def calc_orr_overpotential(
     adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     yaml_path: str = None,
     Nano_particle: bool = False,
-) -> float:
+) -> Dict[str, Any]:
     """
     Entry point : bulk → (slab, ads) → ΔE → η
     """
@@ -344,7 +351,8 @@ def calc_orr_overpotential(
 
     # 4. ΔE & over-potential
     deltaEs, energies = compute_reaction_energies(results, E_slab)
-    eta = get_overpotential_orr(deltaEs, base_path, verbose=True)
+    orr_results = get_overpotential_orr(deltaEs, base_path, verbose=True)
+    eta = orr_results["eta"]
 
     # 5. summary
     with (base_path / "ORR_summary.txt").open("w") as f:
@@ -354,8 +362,9 @@ def calc_orr_overpotential(
         f.write(f"Overpotential η = {eta:.3f} V\n")
     logger.info("Summary written → %s", base_path / "ORR_summary.txt")
 
-    return eta
+    return orr_results
 
+### ---------------------------------------------------------------------------
 def calc_nanoparticle_orr_overpotential(
     nanoparticle: Atoms,
     base_dir: str = "result/matter_sim",

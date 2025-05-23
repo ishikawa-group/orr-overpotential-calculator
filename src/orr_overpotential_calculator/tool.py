@@ -1,3 +1,6 @@
+from typing import Dict, List, Tuple, Union, Optional
+from pathlib import Path
+
 def convert_numpy_types(obj):
     """NumPy型を標準Python型に変換する"""
     import numpy as np
@@ -426,3 +429,335 @@ def tensor_to_slab(tensor, template_slab):
     new_slab.set_atomic_numbers(new_atomic_nums)
     
     return new_slab
+
+def generate_result_csv(
+    materials_data: Dict[str, str], 
+    output_csv: str = "orr_results.csv",
+    verbose: bool = False
+) -> str:
+    """
+    複数の材料のORR計算結果をCSVファイルにまとめる
+    
+    Args:
+        materials_data: 材料名とall_results.jsonパスの辞書 {'Pt111': 'path/to/Pt111/all_results.json', ...}
+        output_csv: 出力CSVファイルのパス
+        verbose: 詳細出力の有無
+        
+    Returns:
+        生成されたCSVファイルのパス
+    """
+    import json
+    import csv
+    from pathlib import Path
+    from typing import Dict, List, Tuple, Union, Optional
+    from orr_overpotential_calculator.calc_orr_overpotential import compute_reaction_energies, get_overpotential_orr
+
+    # CSV出力用のデータ
+    csv_data = []
+    
+    # 各材料ごとにデータを処理
+    for material_name, json_path in materials_data.items():
+        if verbose:
+            print(f"Processing {material_name}...")
+        
+        # JSONデータの読み込み
+        try:
+            with open(json_path, 'r') as f:
+                results = json.load(f)
+        except Exception as e:
+            print(f"Error loading {json_path}: {e}")
+            continue
+        
+        # スラブのエネルギーを取得
+        E_slab = results["OH"]["E_slab"]
+        
+        # 反応エネルギーを計算
+        try:
+            deltaEs, energies = compute_reaction_energies(results, E_slab)
+            
+            # 過電圧を計算（ファイル出力を避けるためにoutput_dirはNoneに設定可能）
+            output_dir = Path(json_path).parent if verbose else None
+            orr_results = get_overpotential_orr(deltaEs, output_dir, verbose=verbose)
+            
+            # 辞書から値を抽出
+            eta = orr_results["eta"]
+            diffG_U0 = orr_results["diffG_U0"]
+            diffG_eq = orr_results["diffG_eq"]
+            U_L = orr_results["U_L"]
+            
+            # 吸着エネルギーを抽出
+            E_ads_OOH = results.get("HO2", {}).get("E_ads_best", None) 
+            E_ads_O = results.get("O", {}).get("E_ads_best", None)
+            E_ads_OH = results.get("OH", {}).get("E_ads_best", None)
+            
+            # 行データを作成
+            row_data = {
+                "Material": material_name,
+                "E_slab": E_slab,
+                "E_H2_g": energies["E_H2_g"],
+                "E_H2O_g": energies["E_H2O_g"],
+                "E_O2_g": energies["E_O2_g"],
+                "E_slab_OOH": energies["E_slab_OOH"],
+                "E_slab_O": energies["E_slab_O"],
+                "E_slab_OH": energies["E_slab_OH"],
+                "E_ads_OOH": E_ads_OOH,
+                "E_ads_O": E_ads_O,
+                "E_ads_OH": E_ads_OH,
+                "dG1": diffG_U0[0],
+                "dG2": diffG_U0[1],
+                "dG3": diffG_U0[2],
+                "dG4": diffG_U0[3],
+                "dG_eq_1": diffG_eq[0],
+                "dG_eq_2": diffG_eq[1],
+                "dG_eq_3": diffG_eq[2],
+                "dG_eq_4": diffG_eq[3],
+                "U_L": U_L,
+                "Overpotential": eta,
+                "Limiting potential": 1.23 - eta,
+            }
+            
+            csv_data.append(row_data)
+            
+            if verbose:
+                print(f"  {material_name}: η = {eta:.3f} V")
+        
+        except Exception as e:
+            print(f"Error processing {material_name}: {e}")
+    
+    # CSVファイルに書き込み
+    if not csv_data:
+        print("No data to write to CSV!")
+        return None
+    
+    # ヘッダーを設定（すべてのデータの列を含める）
+    fieldnames = list(csv_data[0].keys())
+    
+    with open(output_csv, 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(csv_data)
+    
+    print(f"CSV file generated: {output_csv}")
+    return output_csv
+
+def create_orr_volcano_plot(
+    csv_file: Union[str, Path],
+    output_file: str = "orr_volcano.png",
+    x_column: str = "dG_OH",  # 変更：E_ads_OHからdG_OHへ
+    y_column: str = "Limiting potential",
+    label_column: str = "Material",
+    dpi: int = 300,
+    figsize: tuple = (10, 10),
+    markersize: int = 80,
+    ideal_line: float = 1.23,
+) -> str:
+    """
+    ORRの火山プロット (dG_OH vs Limiting potential) を生成する
+    
+    Args:
+        csv_file: 入力CSVファイルのパス
+        output_file: 出力画像のファイル名
+        x_column: x軸に使用する列名
+        y_column: y軸に使用する列名
+        label_column: 凡例に使用する列名
+        dpi: 画像の解像度
+        figsize: 図のサイズ (幅, 高さ) インチ単位
+        markersize: マーカーのサイズ
+        ideal_line: 理想的な限界電位の値 (V)
+        
+    Returns:
+        保存された画像のパス
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from pathlib import Path
+    from typing import Optional, Union
+
+    # CSVファイルの読み込み
+    df = pd.read_csv(csv_file)
+    
+    # -------------- dG_OH の計算 -----------------
+    # 定数
+    T = 298.15  # K
+
+    # ZPE (eV)
+    zpe = {
+        "H2": 0.35, "H2O": 0.57,
+        "Oads": 0.06, "OHads": 0.37, "OOHads": 0.44,
+    }
+
+    # Entropy term TS (eV) at 298 K
+    TS_H2 = 0.403      # eV
+    TS_H2O = 0.67      # eV
+    TS_OHads = 0.0     # eV
+
+    # Electronic part ΔE_OH
+    # 反応式: H2O + * -> OH* + 1/2 H2
+    df["dE_OH"] = df["E_slab_OH"] - df["E_slab"] - (df["E_H2O_g"] - 0.5 * df["E_H2_g"])
+
+    # ZPE difference
+    delta_zpe = zpe["OHads"] - (zpe["H2O"] - 0.5 * zpe["H2"])  # eV
+
+    # -TΔS term (products - reactants) (adsorbate entropies ≈ 0)
+    delta_TS = (0.5 * TS_H2 + TS_OHads) - TS_H2O  # eV
+
+    # ΔG_OH
+    df["dG_OH"] = df["dE_OH"] + delta_zpe - delta_TS
+    
+    # フォントサイズの設定
+    plt.rcParams.update({'font.size': 12})
+    
+    # 図の作成
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # 各材料ごとにプロット
+    scatter = ax.scatter(
+        df[x_column], 
+        df[y_column], 
+        c=range(len(df)), 
+        cmap='viridis', 
+        s=markersize, 
+        alpha=0.8,
+        edgecolors='black'
+    )
+    
+    # 各点にラベルを付ける
+    for i, label in enumerate(df[label_column]):
+        ax.annotate(
+            label, 
+            (df[x_column].iloc[i], df[y_column].iloc[i]),
+            xytext=(5, 5), 
+            textcoords='offset points',
+            fontsize=10,
+            fontweight='bold'
+        )
+    
+    # x軸とy軸の範囲を設定
+    ax.set_xlim(-0, 2)
+    ax.set_ylim(-0.5, 1.5)
+    
+    # 理論線の追加
+    # 理想的な限界電位（1.23V）の水平線
+    ax.axhline(y=ideal_line, color='k', linestyle='--', linewidth=1.5, alpha=0.7, 
+               label=f'Ideal ({ideal_line} V)')
+    
+    # 追加の理論線
+    x_vals = np.linspace(-1, 3, 100)
+    
+    # OH* -> H2O: y = -x + 1.72
+    y_vals_1 = -x_vals + 1.72
+    ax.plot(x_vals, y_vals_1, 'k--', alpha=0.7, linewidth=1.5, label='OH* -> H2O')
+    
+    # O2 -> HOO*: y = x
+    y_vals_2 = x_vals
+    ax.plot(x_vals, y_vals_2, 'k--', alpha=0.7, linewidth=1.5, label='O2 -> HOO*')
+    
+    # x = 0.86の垂直線
+    ax.axvline(x=0.86, color='k', linestyle='--', linewidth=1.5, alpha=0.7, label='x = 0.86')
+    
+    # グラフの設定
+    ax.set_xlabel(f'ΔG_OH (eV)', fontsize=14, fontweight='bold')
+    ax.set_ylabel(f'{y_column} (V)', fontsize=14, fontweight='bold')
+    ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.6)
+    
+    # 凡例の作成
+    # 材料の凡例
+    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=plt.cm.viridis(i/len(df)), 
+                          markersize=10, markeredgecolor='black') for i in range(len(df))]
+    legend1 = ax.legend(handles, df[label_column], 
+                       title='Materials',
+                       loc='upper right',
+                       frameon=True)
+    ax.add_artist(legend1)
+    
+    # 理論線の凡例
+    ax.legend(loc='lower right')
+    
+    # グラフのレイアウト調整
+    plt.tight_layout()
+    
+    # 画像の保存
+    output_path = Path(output_file)
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Volcano plot saved: {output_path}")
+    return str(output_path)
+
+def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):
+    
+    import numpy as np
+    from ase import Atoms
+
+    cluster_center = cluster.get_center_of_mass()
+    indices = list(indices)
+
+    if len(indices) == 1:                             # -------- on-top
+        base_atom = indices[0]
+        pos = cluster.positions[base_atom]
+        normal = pos - cluster_center
+
+    elif len(indices) == 2:                           # -------- bridge
+        i1, i2 = indices
+        p1, p2 = cluster.positions[[i1, i2]]
+        pos       = (p1 + p2) / 2.0
+        edge_vec  = p2 - p1
+        center_vec = pos - cluster_center
+
+        # ① edge_vec に直交し、②外向き成分だけ残した法線
+        normal = np.cross(edge_vec, np.cross(center_vec, edge_vec))
+        if np.linalg.norm(normal) < 1e-6:
+            normal = center_vec.copy()               # 退化時はラジアルを採用
+
+        # 外向きにそろえる
+        if np.dot(normal, center_vec) < 0:
+            normal = -normal
+
+    elif len(indices) == 3:                           # -------- 3 fold hollow
+        i1, i2, i3 = indices
+        p1, p2, p3 = cluster.positions[[i1, i2, i3]]
+        pos    = (p1 + p2 + p3) / 3.0
+        normal = np.cross(p2 - p1, p3 - p1)
+        if np.dot(normal, pos - cluster_center) < 0:
+            normal = -normal
+
+    elif len(indices) == 4:                           # -------- 4 fold hollow
+        i1, i2, i3, i4 = indices
+        p1, p2, p3, p4 = cluster.positions[[i1, i2, i3, i4]]
+        pos    = (p1 + p2 + p3 + p4) / 4.0
+        normal = np.cross(p2 - p1, p3 - p1)
+        if np.dot(normal, pos - cluster_center) < 0:
+            normal = -normal
+
+    else:
+        raise ValueError("indices は 1〜4 個にしてください")
+
+    # ------------ 以降は元のロジックと同じ ------------
+    if orientation is not None:
+        orientation = np.asarray(orientation, float)
+        if np.linalg.norm(orientation) < 1e-6:
+            raise ValueError("orientation ベクトルの長さが 0 です")
+        normal = orientation
+    normal /= np.linalg.norm(normal)
+
+    if height is None:
+        height = 2.0
+
+    ads = adsorbate.copy()
+    if len(ads) == 0:
+        raise ValueError("adsorbate が空です")
+
+    anchor_pos = ads.positions[0].copy()
+    ads.positions -= anchor_pos                         # アンカー原子を原点へ
+
+    if len(ads) > 1:
+        v_ads = ads.positions[1]                        # v_ads = 原点→第2原子
+        ads.rotate(v_ads, normal, center=(0, 0, 0))     # 第1–2原子軸を normal に合わす
+
+    ads.translate(pos + normal * height)                # 高さ分オフセット
+
+    combined = cluster.copy()
+    combined += ads
+    return combined
