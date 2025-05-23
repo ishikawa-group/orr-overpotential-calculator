@@ -233,13 +233,13 @@ def get_overpotential_orr(
     S["O2"]   = 0 + 2 * (S["H2O"]  - S["H2"])
 
     deltaZPE = np.array([
-        (zpe["OOHads"] - zpe["O2ads"] - 0.5 * zpe["H2"]) + (zpe["O2ads"] - zpe["O2"]),
+        zpe["OOHads"] + ( - 0.5 * zpe["H2"] +  - zpe["O2"]),
         zpe["Oads"] + zpe["H2O"] - zpe["OOHads"] - 0.5 * zpe["H2"],
         zpe["OHads"] - zpe["Oads"] - 0.5 * zpe["H2"],
         zpe["H2O"] - zpe["OHads"] - 0.5 * zpe["H2"],
     ])
     deltaTS = np.array([
-        (T * S["OOHads"] - T * S["O2ads"] - 0.5 * T * S["H2"]) + (T * S["O2ads"] - T * S["O2"]),
+        T * S["OOHads"]  + (- 0.5 * T * S["H2"] +  - T * S["O2"]),
         T * S["Oads"] + T * S["H2O"] - T * S["OOHads"] - 0.5 * T * S["H2"],
         T * S["OHads"] - T * S["Oads"] - 0.5 * T * S["H2"],
         T * S["H2O"] - T * S["OHads"] - 0.5 * T * S["H2"],

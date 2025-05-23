@@ -2,9 +2,9 @@
 #$ -cwd
 #$ -l cpu_160=1
 #$ -l h_rt=24:00:00
-#$ -N ORR_Pt111_3
-#$ -o /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example_3/Pt111/log/RPBE_output.log
-#$ -e /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example_3/Pt111/log/RPBE_error.log
+#$ -N ORR_Rh111
+#$ -o /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/surface/Rh111/log/RPBE_output.log
+#$ -e /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/surface/Rh111/log/RPBE_error.log
 
 # Load required modules
 module load intel
@@ -19,4 +19,4 @@ export VASP_PP_PATH=/gs/fs/tga-ishikawalab/vasp/potential
 export VASP_SCRIPT=/gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/src/orr_overpotential_calculator/run_vasp/run_vasp.py
 
 # Run python script
-python3 /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example_3/run_test.py
+python3 /gs/fs/tga-ishikawalab/wakamiya/orr_overpotential_calculator/example/surface/run_Rh111.py

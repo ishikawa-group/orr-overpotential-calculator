@@ -31,20 +31,14 @@ ENV/
 
 # example ディレクトリ内のファイル管理
 /example/*
-!/example/*/
 /example/*/*
-!/example/*/*/
 /example/*/*/*
-!/example/*/*/*/
 /example/*/*/*/*
-!/example/*/*/*/*/
 /example/*/*/*/*/*
-!/example/*/*/*/*/*/
 
 # 追跡したいファイル形式のみ許可
-!/example/**/*.py
-!/example/**/*.yaml
-!/example/**/*.sh
-!/example/**/*.json
-!/example/**/*.png
-!/example/**/*.txt
+#!/example/**/*.py
+#!/example/**/*.yaml
+#!/example/**/*.json
+#!/example/**/*.png
+#!/example/**/*.txt
