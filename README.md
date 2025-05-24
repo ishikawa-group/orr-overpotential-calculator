@@ -66,13 +66,15 @@ print(f"ORR overpotential: {eta:.3f} V")
 print(f"Reaction Free Energy Change at U=0V: {diffG_U0}")
 print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
 ```
-```
 
 ## 依存パッケージ
 
 - numpy
-- ase (Atomic Simulation Environment)
+- pandas
 - matplotlib
+- ase (Atomic Simulation Environment)
+- mattersim (Neural Network Potential for Materials Simulation)
+
 
 ## パラメータ説明
 

@@ -32,3 +32,27 @@ ENV/
 # example ディレクトリ内のファイル管理
 example/*
 !example/surface/
+
+
+!example/nanoparticle/
+example/nanoparticle/**/*
+!example/nanoparticle/**/*.py
+!example/nanoparticle/**/*.md
+!example/nanoparticle/**/*.json
+!example/nanoparticle/**/*.png
+!example/nanoparticle/**/*.txt
+!example/nanoparticle/**/*.yaml
+
+!example/nanoparticle/Pt_nanoparticle_mattersim
+!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.py
+!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.json
+!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.png
+!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.txt
+!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.yaml
+
+!example/nanoparticle/Pt_nanoparticle_vasp
+!example/nanoparticle/Pt_nanoparticle_vasp/**/*.py
+!example/nanoparticle/Pt_nanoparticle_vasp/**/*.json
+!example/nanoparticle/Pt_nanoparticle_vasp/**/*.png
+!example/nanoparticle/Pt_nanoparticle_vasp/**/*.txt
+!example/nanoparticle/Pt_nanoparticle_vasp/**/*.yaml

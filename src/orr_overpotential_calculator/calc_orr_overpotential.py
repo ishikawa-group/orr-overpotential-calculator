@@ -484,12 +484,15 @@ def calc_nanoparticle_orr_overpotential(
     force: bool = False,
     log_level: str = "INFO",
     calc_type: str = "mattersim",
-    adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    adsorbates: Dict[str, List[Tuple]] = None,  # 型を修正
     yaml_path: str = None,
-    Nano_particle: bool = False,
-) -> float:
+    vacuum_factor: float = 2.0,
+) -> Dict[str, Any]:  # 戻り値の型を変更
     """
-    Entry point : bulk → (slab, ads) → ΔE → η
+    Entry point : nanoparticle → (gas, ads) → ΔE → η
+    
+    Returns:
+        Dict containing: eta, diffG_U0, diffG_eq, U_L, G_profile_U0, G_profile_Ueq
     """
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
@@ -497,34 +500,60 @@ def calc_nanoparticle_orr_overpotential(
         stream=sys.stdout,
     )
     
-    # 渡されない場合はグローバル変数を使用
-    if adsorbates is None:
-        adsorbates = ADSORBATES
-
     base_path = Path(base_dir).resolve()
     base_path.mkdir(parents=True, exist_ok=True)
 
     # 1. nanoparticle optimisation
     logger.info("Optimising nanoparticle …")
-    opt_nanoparticle, E_nanoparticle = optimize_nanoparticle(nanoparticle, str(base_path / "nanoparticle"), calc_type, yaml_path)
 
-    # 2. gas + adsorption calculations (offset scheme)
+    # ナノ粒子サイズの詳細計算
+    positions = nanoparticle.get_positions()
+    
+    # 各方向のサイズを計算
+    x_size = positions[:, 0].max() - positions[:, 0].min()
+    y_size = positions[:, 1].max() - positions[:, 1].min()
+    z_size = positions[:, 2].max() - positions[:, 2].min()
+    
+    # 最大サイズを使用
+    cluster_diameter = max(x_size, y_size, z_size)
+    
+    # 真空層サイズを計算（最小値も考慮）
+    vacuum_size = cluster_diameter * vacuum_factor
+    gas_box = cluster_diameter + vacuum_size
+    
+    opt_nanoparticle, E_nanoparticle = optimize_nanoparticle(nanoparticle, gas_box, str(base_path / "nanoparticle"), calc_type, yaml_path)
+
+    # 2. gas + adsorption calculations (index scheme)
     logger.info("Running required molecule calculations …")
+    
+    # adsorbatesからindices_dictに変換
+    indices_dict = None
+    if adsorbates:
+        # 直接adsorbatesをindices_dictとして使用
+        indices_dict = adsorbates
+    else:
+        # デフォルトのインデックス辞書
+        indices_dict = {
+            "HO2": [(0)],
+            "O":   [(0)],
+            "OH":  [(0)],
+        }
+
     results = calculate_required_molecules_with_index(
         opt_nanoparticle, E_nanoparticle, base_path,
-        force=force, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
+        force=force, calc_type=calc_type, indices_dict=indices_dict, yaml_path=yaml_path,
     )
 
     # 4. ΔE & over-potential
     deltaEs, energies = compute_reaction_energies(results, E_nanoparticle)
-    eta = get_overpotential_orr(deltaEs, base_path, verbose=True)
+    orr_results = get_overpotential_orr(deltaEs, base_path, verbose=True)
 
     # 5. summary
     with (base_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary ---\n\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in deltaEs) + "\n")
-        f.write(f"Overpotential η = {eta:.3f} V\n")
+        f.write(f"Overpotential η = {orr_results['eta']:.3f} V\n")
     logger.info("Summary written → %s", base_path / "ORR_summary.txt")
 
-    return eta
+    return orr_results

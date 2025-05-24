@@ -85,9 +85,11 @@ def optimize_slab(opt_bulk: Atoms, work_dir: str, calc_type: str = "mattersim", 
     E_opt_slab = opt_slab.get_potential_energy()
     return opt_slab, E_opt_slab
 
-def optimize_nanoparticle(nanoparticle: Atoms, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
+def optimize_nanoparticle(nanoparticle: Atoms, gas_box: float, work_dir: str, calc_type: str = "mattersim", yaml_path: str = YAML_PATH) -> Tuple[Atoms, float]:
     nanoparticle_atoms = nanoparticle.copy()
+    nanoparticle_atoms.set_cell([gas_box, gas_box, gas_box])
     nanoparticle_atoms.set_pbc(True)
+    nanoparticle_atoms.center()
     nanoparticle_atoms = set_initial_magmoms(nanoparticle_atoms, kind="nanoparticle")
     opt_nanoparticle = my_calculator(nanoparticle_atoms, "nanoparticle", calc_type=calc_type, yaml_path=yaml_path, calc_directory=work_dir)
     auto_lmaxmix(opt_nanoparticle)
@@ -203,7 +205,7 @@ def calc_adsorption_with_offset(
     return float(E_total), dt
 
 def calc_adsorption_with_index(
-    opt_slab: Atoms,
+    opt_structure: Atoms,
     opt_mol: Atoms,
     indices: list,  # 原子インデックスのリスト (1-4個)
     work_dir: str,
@@ -216,7 +218,7 @@ def calc_adsorption_with_index(
     指定した原子インデックスに基づいて吸着分子を配置し、エネルギー計算を行う
     
     Parameters:
-        opt_slab: 最適化済みスラブ構造
+        opt_structure: 最適化済み構造（スラブ、ナノ粒子など）
         opt_mol: 最適化済み分子構造
         indices: 吸着サイトを定義する原子インデックスのリスト (1-4個)
         work_dir: 計算ディレクトリ
@@ -237,10 +239,10 @@ def calc_adsorption_with_index(
     os.makedirs(work_dir, exist_ok=True)
     t0 = time.time()
 
-    # ---------- 1. スラブの準備 ----------------------------
-    slab = opt_slab.copy()
-    slab = set_initial_magmoms(slab, kind="slab")
-    slab.set_pbc(True)
+    # ---------- 1. 構造の準備 ----------------------------
+    structure = opt_structure.copy()
+    structure = set_initial_magmoms(structure, kind="nanoparticle_gas")  # kindは構造タイプに応じて変更可能
+    structure.set_pbc(True)
 
     # ---------- 2. 吸着分子の準備 --------------------
     ads = opt_mol.copy()
@@ -253,8 +255,8 @@ def calc_adsorption_with_index(
 
     # ---------- 3. 吸着分子の配置 ----------------------------------
     # place_adsorbate関数を使用して吸着分子を配置
-    slab_ads = place_adsorbate(
-        cluster=slab.copy(),
+    structure_ads = place_adsorbate(
+        cluster=structure.copy(),
         adsorbate=ads,
         indices=indices,
         height=height,  # Noneの場合、関数内でデフォルト値(2.0)が使用される
@@ -263,8 +265,8 @@ def calc_adsorption_with_index(
     
 
     # ---------- 4. 計算実行と結果取得 -----------------------------------
-    calc = my_calculator(slab_ads,
-                        "",
+    calc = my_calculator(structure_ads,
+                        kind='nanoparticle_gas',
                         calc_type=calc_type,
                         yaml_path=yaml_path,
                         calc_directory=work_dir)
