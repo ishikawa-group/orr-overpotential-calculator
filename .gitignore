@@ -30,4 +30,5 @@ ENV/
 *.swp
 
 # example ディレクトリ内のファイル管理
-example/
+example/*
+!example/surface/

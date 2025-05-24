@@ -32,6 +32,7 @@ from .calc_orr_energy import (
     optimize_nanoparticle,
     optimize_nanoparticle_gas,
     calc_adsorption_with_offset,
+    calc_adsorption_with_index,
 )
 from .tool import convert_numpy_types
 
@@ -149,7 +150,119 @@ def calculate_required_molecules(
               (base_dir / "all_results.json").open("w"), indent=2)
     return results
 
+def calculate_required_molecules_with_index(
+    opt_slab: Atoms,
+    E_opt_slab: float,
+    base_dir: Path,
+    force: bool = False,
+    calc_type: str = "mattersim",
+    indices_dict: Dict[str, List] = None,
+    yaml_path: str = None,
+    height: float = None,
+    orientation: list = None,
+) -> Dict[str, Any]:
+    """
+    指定した原子インデックスに基づいて吸着計算を行い、ORR解析に必要な分子計算を実行する
+    
+    Parameters:
+        opt_slab: 最適化済みスラブ構造
+        E_opt_slab: 最適化済みスラブのエネルギー
+        base_dir: 出力ディレクトリ
+        force: 既存の計算を上書きするかどうか
+        calc_type: 計算タイプ
+        indices_dict: 分子ごとに計算するインデックスセットの辞書
+        yaml_path: 設定ファイルのパス
+        height: 吸着高さ (オプション)
+        orientation: 分子配向ベクトル (オプション)
+        
+    Returns:
+        Dict[str, Any]: 計算結果の辞書
+    """
+    results: Dict[str, Any] = {}
+    base_dir.mkdir(parents=True, exist_ok=True)
 
+    # デフォルト値を使用
+    if indices_dict is None:
+        # デフォルトのインデックス辞書
+        indices_dict = {
+            "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # edge_top, edge_bridge, face_top, face_bridge, face_3-fold-hollow
+            "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+            "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+        }
+
+    for mol_name, mol in MOLECULES.items():
+        logger.info("=== %s ===", mol_name)
+        mol_dir = base_dir / mol_name
+        gas_dir = mol_dir / f"{mol_name}_gas"
+        ads_dir = mol_dir / "adsorption"
+        gas_dir.mkdir(parents=True, exist_ok=True)
+        ads_dir.mkdir(parents=True, exist_ok=True)
+
+        # ---------- 1. gas optimisation ----------------------------------
+        gas_json = gas_dir / "opt_result.json"
+        xyz_gas = gas_dir / "opt.xyz"
+
+        opt_mol, E_gas = optimize_gas(mol_name, GAS_BOX, str(gas_dir), calc_type, yaml_path)
+        opt_mol.write(xyz_gas)
+        json.dump({"E_opt": float(E_gas)}, gas_json.open("w"))
+        
+        results.setdefault(mol_name, {})["E_gas"] = float(E_gas)
+
+        # ---------- 2. adsorption skip for gas-only ----------------------
+        if mol_name in GAS_ONLY:
+            continue
+
+        indices_list = indices_dict.get(mol_name, [])
+        indices_data: Dict[str, Dict[str, float]] = {}
+
+        for idx in indices_list:
+            # インデックスを文字列化してキーを作成
+            idx_str = "_".join(map(str, idx))
+            key = f"idx_{idx_str}"
+            idx_json = ads_dir / f"{key}.json"
+            # 計算サブディレクトリ
+            work_dir = ads_dir / key
+
+            if idx_json.exists() and (work_dir / ".done").exists() and not force:
+                # 既存の計算結果を読み込む
+                data = json.load(idx_json.open())
+                E_total = data["E_total"]
+                elapsed = data["elapsed"]
+            else:
+                # インデックスを使って吸着計算を実行
+                E_total, elapsed = calc_adsorption_with_index(
+                    opt_slab, opt_mol, idx, str(work_dir), 
+                    height=height, orientation=orientation,
+                    calc_type=calc_type, yaml_path=yaml_path
+                )
+                # 結果を保存
+                json.dump({"E_total": E_total,
+                           "elapsed": elapsed}, idx_json.open("w"))
+                (work_dir / ".done").touch()
+                
+            indices_data[key] = {"E_total": E_total, "elapsed": elapsed}
+
+        # ---------- 3. pick lowest-E -------------------------------------
+        if indices_data:  # データが存在する場合のみ
+            best_key, E_best = min(
+                ((k, d["E_total"]) for k, d in indices_data.items()),
+                key=lambda x: x[1]
+            )
+            E_ads_best = E_best - (E_opt_slab + E_gas)
+            results[mol_name].update({
+                "E_slab": float(E_opt_slab),
+                "E_total_best": float(E_best),
+                "best_site": best_key,
+                "E_ads_best": float(E_ads_best),
+                "sites": indices_data,
+            })
+            logger.info("  -> best site: %s   E_ads = %.3f eV",
+                       best_key, E_ads_best)
+
+    # ---------- 4. write summary -----------------------------------------
+    json.dump(convert_numpy_types(results),
+              (base_dir / "all_results.json").open("w"), indent=2)
+    return results
 # ---------------------------------------------------------------------------
 # Reaction/overpotential part
 # ---------------------------------------------------------------------------
@@ -175,8 +288,8 @@ def compute_reaction_energies(results: Dict[str, Any], E_slab: float) -> Tuple[L
     E_slab_OH  = e_total("OH")
 
     # add solvent correction (https://doi.org/10.1016/j.cattod.2018.07.036, https://doi.org/10.1039/D0NR03339A)--------------------------
-    E_slab_OOH = E_slab_OOH - 0.25
-    E_slab_OH   = E_slab_OH  - 0.50
+    E_slab_OOH = E_slab_OOH - 0.1
+    E_slab_OH   = E_slab_OH  - 0.2
     
     # save energies to dict
     energies = {
@@ -397,7 +510,7 @@ def calc_nanoparticle_orr_overpotential(
 
     # 2. gas + adsorption calculations (offset scheme)
     logger.info("Running required molecule calculations …")
-    results = calculate_required_molecules(
+    results = calculate_required_molecules_with_index(
         opt_nanoparticle, E_nanoparticle, base_path,
         force=force, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
     )
@@ -415,29 +528,3 @@ def calc_nanoparticle_orr_overpotential(
     logger.info("Summary written → %s", base_path / "ORR_summary.txt")
 
     return eta
-# ---------------------------------------------------------------------------
-# main entry -----------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-
-# main関数を修正してcalc_orr_overpotential関数を活用する
-def main():
-    p = argparse.ArgumentParser(description="ORR workflow (offset adsorption)")
-    p.add_argument("--base-dir", default="result/matter_sim")
-    p.add_argument("--force",  action="store_true")
-    p.add_argument("--log",    default="INFO")
-    p.add_argument("--calc-type", default="mattersim")
-    p.add_argument("--yaml-path", default=None, help="Path to VASP configuration YAML file")
-    args = p.parse_args()
-
-    bulk = fcc111("Pt", size=(5, 5, 4), a=4.0, vacuum=None, periodic=True)
-    eta = calc_orr_overpotential(
-        bulk, args.base_dir, args.force, args.log, args.calc_type,
-        adsorbates=None, yaml_path=args.yaml_path  # yaml_pathを追加
-    )
-    print(f"η_ORR = {eta:.3f} V")
-    return eta
-
-
-if __name__ == "__main__":
-    main()

@@ -594,6 +594,7 @@ def create_orr_volcano_plot(
 
     # Electronic part ΔE_OH
     # 反応式: H2O + * -> OH* + 1/2 H2
+    df["E_slab_OH"] = df["E_slab_OH"] - 0.1
     df["dE_OH"] = df["E_slab_OH"] - df["E_slab"] - (df["E_H2O_g"] - 0.5 * df["E_H2_g"])
 
     # ZPE difference
@@ -634,7 +635,7 @@ def create_orr_volcano_plot(
         )
     
     # x軸とy軸の範囲を設定
-    ax.set_xlim(-0, 2)
+    ax.set_xlim(-0.25, 1.75)
     ax.set_ylim(-0.5, 1.5)
     
     # 理論線の追加

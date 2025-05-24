@@ -264,7 +264,7 @@ def calc_adsorption_with_index(
 
     # ---------- 4. 計算実行と結果取得 -----------------------------------
     calc = my_calculator(slab_ads,
-                        "slab",
+                        "",
                         calc_type=calc_type,
                         yaml_path=yaml_path,
                         calc_directory=work_dir)
@@ -355,36 +355,3 @@ def calculate_all_molecules(opt_slab: Atoms, E_opt_slab: float, calc_type: str =
 
     return all_results
 
-# メイン処理として実行
-if __name__ == "__main__":
-    print("ORR関連分子の吸着計算を開始します")
-
-    # 計算タイプを設定（デフォルト値または引数から取得できるようにしても良い）
-    calc_type = "mattersim"
-
-    # 0. ディレクトリ準備
-    os.makedirs(BASE_DIR, exist_ok=True)
-    bulk_dir = os.path.join(BASE_DIR, "Pt_bulk")
-    slab_dir = os.path.join(BASE_DIR, "Pt_slab")
-    os.makedirs(bulk_dir, exist_ok=True)
-    os.makedirs(slab_dir, exist_ok=True)
-
-    # 1. バルクの構造最適化 (最初に一度だけ)
-    print("1) Optimizing Pt bulk...")
-    Pt111 = fcc111("Pt", size=(4,4,4), a=4.0, vacuum=None, periodic=True)
-    opt_bulk, E_opt_bulk = optimize_bulk(Pt111, bulk_dir, calc_type, YAML_PATH)
-
-    # 2. スラブの構造最適化 (最初に一度だけ)
-    print("2) Optimizing Pt(111) slab...")
-    opt_slab, E_opt_slab = optimize_slab(opt_bulk, slab_dir, calc_type, YAML_PATH)
-
-    # 3. 全分子の吸着計算を実行
-    results = calculate_all_molecules(opt_slab, E_opt_slab, calc_type, YAML_PATH)
-
-    # 4. 結果の簡単なサマリーを表示
-    print("\n=== 計算結果サマリー ===")
-    for mol_name, data in results.items():
-        if "error" in data:
-            print(f"{mol_name}: エラー発生")
-        else:
-            print(f"{mol_name}: 最適サイト = {data['best_site']}, 最安定吸着エネルギー = {data['best_adsorption_energy']:.6f} eV")
