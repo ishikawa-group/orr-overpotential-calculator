@@ -43,6 +43,13 @@ example/nanoparticle/**/*
 !example/nanoparticle/**/*.txt
 !example/nanoparticle/**/*.yaml
 
+!example/nanoparticle/result
+!example/nanoparticle/result/**/*.py
+!example/nanoparticle/result/**/*.json
+!example/nanoparticle/result/**/*.png
+!example/nanoparticle/result/**/*.txt
+!example/nanoparticle/result/**/*.yaml
+
 !example/nanoparticle/Pt_nanoparticle_mattersim
 !example/nanoparticle/Pt_nanoparticle_mattersim/**/*.py
 !example/nanoparticle/Pt_nanoparticle_mattersim/**/*.json
