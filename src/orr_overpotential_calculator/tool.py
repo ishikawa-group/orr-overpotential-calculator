@@ -1,11 +1,14 @@
 from typing import Dict, List, Tuple, Union, Optional
 from pathlib import Path
+import numpy as np
+
 
 def convert_numpy_types(obj):
-    """NumPy型を標準Python型に変換する"""
+    """Convert NumPy types to standard Python types"""
     import numpy as np
+    
     if isinstance(obj, np.number):
-        return obj.item()  # NumPy数値型をPython標準の数値型に変換
+        return obj.item()  # Convert NumPy numeric types to Python standard numeric types
     elif isinstance(obj, dict):
         return {key: convert_numpy_types(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -14,177 +17,192 @@ def convert_numpy_types(obj):
         return tuple(convert_numpy_types(item) for item in obj)
     return obj
 
+
 def get_number_of_layers(atoms):
     """
-    原子の z 座標に基づいて、モデル内の層の数を計算する関数。
+    Calculate the number of layers in a model based on atomic z-coordinates.
     
     Args:
-        atoms: ASE atoms オブジェクト
+        atoms: ASE atoms object
         
     Returns:
-        層の数（整数）
+        int: Number of layers
     """
     import numpy as np
 
-    pos  = atoms.positions
-    # 層の識別のための丸め（ここでは3桁で丸め）
-    zpos = np.round(pos[:,2], decimals=3)
-    nlayer = len(set(zpos))
-    return nlayer
+    positions = atoms.positions
+    # Round z-coordinates for layer identification (3 decimal places)
+    z_positions = np.round(positions[:, 2], decimals=3)
+    num_layers = len(set(z_positions))
+    return num_layers
 
 
 def set_tags_by_z(atoms):
     """
-    原子の z 座標に基づいて、層ごとにタグを設定する関数。
-    各層の原子には、下から順に 0, 1, 2... のタグが付けられる。
+    Set tags for each layer based on atomic z-coordinates.
+    Each layer is assigned tags 0, 1, 2... from bottom to top.
     
     Args:
-        atoms: ASE atoms オブジェクト
+        atoms: ASE atoms object
         
     Returns:
-        タグが設定された新しい atoms オブジェクト
+        ASE atoms object with tags set
     """
     import numpy as np
     import pandas as pd
 
-    newatoms = atoms.copy()
-    pos  = newatoms.positions
-    # 小数第1位で丸め（層の幅の目安として利用）
-    zpos = np.round(pos[:,2], decimals=1)
+    new_atoms = atoms.copy()
+    positions = new_atoms.positions
+    # Round to 1 decimal place (used as layer width guideline)
+    z_positions = np.round(positions[:, 2], decimals=1)
     
-    # 一意な層の値を抽出し、必ず昇順にソートする
-    bins = np.sort(np.array(list(set(zpos)))) + 1.0e-2
+    # Extract unique layer values and ensure ascending order
+    bins = np.sort(np.array(list(set(z_positions)))) + 1.0e-2
     bins = np.insert(bins, 0, 0)
     
-    # 各区間にラベルを設定（0,1,2,...）
-    labels = list(range(len(bins)-1))
-    tags = pd.cut(zpos, bins=bins, labels=labels, include_lowest=True).tolist()
-    newatoms.set_tags(tags)
+    # Set labels for each interval (0, 1, 2, ...)
+    labels = list(range(len(bins) - 1))
+    tags = pd.cut(z_positions, bins=bins, labels=labels, include_lowest=True).tolist()
+    new_atoms.set_tags(tags)
     
-    return newatoms
+    return new_atoms
 
 
 def fix_lower_surface(atoms):
     """
-    モデルの下半分の層を固定する関数。
-    まず原子に z 座標に基づいたタグを設定し、
-    その後、下半分の層に属する原子を固定する。
+    Fix the bottom half layers of the model.
+    First, set tags based on z-coordinates, then fix atoms in the bottom half layers.
     
-    例: 3層の場合は floor(3/2)=1 となり、下層1層分が固定される。
+    Example: For 3 layers, floor(3/2)=1, so the bottom 1 layer is fixed.
     
     Args:
-        atoms: ASE atoms オブジェクト
+        atoms: ASE atoms object
         
     Returns:
-        下半分が固定された新しい atoms オブジェクト
+        ASE atoms object with bottom half fixed
     """
     import numpy as np
     from ase.constraints import FixAtoms
 
     atom_fix = atoms.copy()
 
-    # タグ付け（下層からの階層番号）
+    # Set tags (layer numbers from bottom)
     atom_fix = set_tags_by_z(atom_fix)
-    # タグ情報を取得
     tags = atom_fix.get_tags()
 
-    # 全体の層数を取得（get_number_of_layers 内の丸め精度と set_tags_by_z の丸め精度は用途に合わせて調整）
-    nlayer = get_number_of_layers(atom_fix)
-    # 下半分の層番号（端数は切り捨て）
-    lower_layers = list(range(nlayer // 2))
+    # Get total number of layers
+    num_layers = get_number_of_layers(atom_fix)
+    # Bottom half layer numbers (rounded down)
+    lower_layers = list(range(num_layers // 2))
     
-    # 固定対象の原子インデックスを選択
+    # Select atomic indices to fix
     fix_indices = [atom.index for atom in atom_fix if atom.tag in lower_layers]
     
-    # FixAtoms 制約を適用
-    c = FixAtoms(indices=fix_indices)
-    atom_fix.set_constraint(c)
+    # Apply FixAtoms constraint
+    constraint = FixAtoms(indices=fix_indices)
+    atom_fix.set_constraint(constraint)
 
     return atom_fix
 
 
 def parallel_displacement(atoms, vacuum=15.0):
     """
-    スラブを z 軸方向に平行移動させ、最低点が z=0 になるようにし、
-    指定された真空層 (vacuum[Å]) を上側（z正方向）に追加する関数です。
+    Translate slab in z-direction so the lowest point becomes z=0,
+    and add specified vacuum layer (vacuum[Å]) to the top (positive z-direction).
     
-    注意:
-        - この関数は、入力のスラブが表面法線方向に z 軸が一致していることを前提とします。
-        - すでに斜交セル等の場合は、予め回転などの前処理を行ってください。
+    Note:
+        - This function assumes that the slab's surface normal direction aligns with the z-axis.
+        - For oblique cells, perform rotation preprocessing beforehand.
     
     Args:
-        atoms: ASE Atoms オブジェクト（スラブ。vacuumオプションなしで生成したものが望ましい）
-        vacuum: 追加する真空層の厚さ (Å)。デフォルトは 15.0 Å。
+        atoms: ASE Atoms object (slab, preferably generated without vacuum option)
+        vacuum: Thickness of vacuum layer to add (Å). Default is 15.0 Å.
     
     Returns:
-        原子位置を z=0 に下詰めし、セルの z 軸長を (スラブの高さ + vacuum) に設定した
-        新しい ASE Atoms オブジェクト。
+        New ASE Atoms object with atomic positions shifted to z=0 bottom alignment
+        and cell z-axis length set to (slab height + vacuum).
     """
-    # 元のオブジェクトを変更しないようにコピーを作成
+    # Create copy to avoid modifying original object
     slab = atoms.copy()
 
-    # 現在の原子位置を取得し、z方向の最小値を計算
+    # Get current atomic positions and calculate minimum z value
     positions = slab.get_positions()
-    zmin = positions[:, 2].min()
+    z_min = positions[:, 2].min()
 
-    # スラブ全体を z 軸方向に平行移動し、最低点が z=0 になるようにする
-    slab.translate([0, 0, -zmin])
+    # Translate entire slab in z-direction so lowest point becomes z=0
+    slab.translate([0, 0, -z_min])
 
-    # 平行移動後の最高 z 座標を取得
-    zmax = slab.get_positions()[:, 2].max()
-    # 新しいセルの z 軸長（スラブ高さ + vacuum）を計算
-    new_z_length = zmax + vacuum
+    # Get maximum z coordinate after translation
+    z_max = slab.get_positions()[:, 2].max()
+    # Calculate new z-axis length (slab height + vacuum)
+    new_z_length = z_max + vacuum
 
-    # セル行列を取得して z 軸方向のサイズを新しい長さにセットする
-    # ※ここでは、セルの第3ベクトルが z 軸方向に並んでいる前提
+    # Get cell matrix and set z-direction size to new length
+    # Here we assume the cell's third vector aligns with z-direction
     cell = slab.get_cell().copy()
-    # 安全のため、z 軸の成分を [0, 0, new_z_length] に再設定する方法もあります
+    # For safety, reset z-axis component to [0, 0, new_z_length]
     cell[2] = [0.0, 0.0, new_z_length]
-    slab.set_cell(cell, scale_atoms=False)  # scale_atoms=False で原子座標は変更せずセルだけ更新
+    slab.set_cell(cell, scale_atoms=False)  # scale_atoms=False updates only cell, not atomic coordinates
 
     return slab
 
+
 def auto_lmaxmix(atoms):
-    """d/f 元素を含む場合 lmaxmix を自動設定"""
-
-    d_elems = {"Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn",
-               "Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd",
-               "Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg"}
-    f_elems = {"La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy",
-               "Ho","Er","Tm","Yb","Lu","Ac","Th","Pa","U","Np",
-               "Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr"}
-    symbs   = set(atoms.get_chemical_symbols())
-    atoms.calc.set(lmaxmix = 6 if symbs & f_elems else 4 if symbs & d_elems else 2)
-
+    """Automatically set lmaxmix when d/f elements are present"""
+    d_elements = {
+        "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
+        "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
+        "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg"
+    }
+    f_elements = {
+        "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy",
+        "Ho", "Er", "Tm", "Yb", "Lu", "Ac", "Th", "Pa", "U", "Np",
+        "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr"
+    }
+    
+    symbols = set(atoms.get_chemical_symbols())
+    
+    if symbols & f_elements:
+        lmaxmix_value = 6
+    elif symbols & d_elements:
+        lmaxmix_value = 4
+    else:
+        lmaxmix_value = 2
+        
+    atoms.calc.set(lmaxmix=lmaxmix_value)
     return atoms
 
+
 def my_calculator(
-        atoms, kind:str, 
-        calc_type:str="mattersim", 
-        yaml_path:str="data/vasp.yaml",
-        calc_directory:str="calc"): 
+    atoms, 
+    kind: str, 
+    calc_type: str = "mattersim", 
+    yaml_path: str = "data/vasp.yaml",
+    calc_directory: str = "calc"
+): 
     """
     Create calculator instance based on parameters from YAML file and attach to atoms.
 
     Args:
-        atoms: ASE atoms ocject
+        atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
         calc_type: "vasp" / "mattersim" - calculator type
-        calc_directory: Calculation directory for vasp
+        yaml_path: Path to YAML configuration file
+        calc_directory: Calculation directory for VASP
 
     Returns:
-        atoms: 計算機が設定されたAtomsオブジェクト（bulkの場合はFrechetCellFilter）
+        atoms: Atoms object with calculator set (ExpCellFilter for bulk calculations)
     """
-    # すべてのインポートを関数内に配置
     import yaml
     import sys
-    from typing import Dict, Any
+    import torch
 
-    if calc_type.lower() == "vasp":
+    calc_type = calc_type.lower()
+    
+    if calc_type == "vasp":
         from ase.calculators.vasp import Vasp
  
-        # YAMLファイルを直接読み込む
-        yaml_path = yaml_path
+        # Load YAML file directly
         try:
             with open(yaml_path, 'r') as f:
                 vasp_params = yaml.safe_load(f)
@@ -198,71 +216,37 @@ def my_calculator(
         if kind not in vasp_params['kinds']:
             raise ValueError(f"Invalid kind '{kind}'. Must be one of {list(vasp_params['kinds'].keys())}")
 
-        # 共通パラメータをコピー
+        # Copy common parameters
         params = vasp_params['common'].copy()
-
-        # kind固有のパラメータで更新
+        # Update with kind-specific parameters
         params.update(vasp_params['kinds'][kind])
-
-        # 関数引数で指定されたパラメータを設定
+        # Set function argument parameters
         params['directory'] = calc_directory
 
-        # kptsをタプルに変換 (ASEはタプルを期待するため)
+        # Convert kpts to tuple (ASE expects tuple)
         if 'kpts' in params and isinstance(params['kpts'], list):
             params['kpts'] = tuple(params['kpts'])
 
-        # 原子オブジェクトに計算機を設定して返す
+        # Set calculator to atoms object and return
         atoms.calc = Vasp(**params)
-        # 自動的にlmaxmixを設定
+        # Automatically set lmaxmix
         atoms = auto_lmaxmix(atoms)
 
-    elif calc_type.lower() == "mattersim":
-        # MatterSimを使用する場合
-        import torch
+    elif calc_type == "mattersim":
         from mattersim.forcefield.potential import MatterSimCalculator
-        from ase.filters import FrechetCellFilter, ExpCellFilter
-        from ase.constraints import FixSymmetry
-        from ase.optimize import FIRE, LBFGS
+        from ase.filters import ExpCellFilter
+        from ase.optimize import FIRE
         
-        if torch.cuda.is_available():
-            device = "cuda"
-        #elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-        #    device = "mps"
-        else:
-            device = "cpu"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         atoms.calc = MatterSimCalculator(load_path="MatterSim-v1.0.0-5M.pth", device=device)
         
-        # bulk計算の場合はCellFilterを適用
+        # Apply CellFilter for bulk calculations
         if kind == "bulk":
             atoms = ExpCellFilter(atoms)
         
-        #構造最適化の実行
-        opt = FIRE(atoms)
-        opt.run(fmax=0.05, steps=300)
-
-    elif calc_type.lower() == "sevennet":
-        # MatterSimを使用する場合
-        import torch
-        from sevenn.calculator import SevenNetCalculator
-        from ase.filters import FrechetCellFilter, ExpCellFilter
-        from ase.constraints import FixSymmetry
-        from ase.optimize import FIRE, LBFGS
-        
-        if torch.cuda.is_available():
-            device = "cuda"
-        #elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-        #    device = "mps"
-        else:
-            device = "cpu"
-        atoms.calc = SevenNetCalculator('7net-mf-ompa', modal='mpa', device=device)
-        
-        # bulk計算の場合はExpCellFilterを適用
-        if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
-        
-        #構造最適化の実行
-        opt = FIRE(atoms)
-        opt.run(fmax=0.05, steps=200)
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=0.05, steps=300)
         
     else:
         raise ValueError("calc_type must be 'vasp' or 'mattersim'")
@@ -270,52 +254,53 @@ def my_calculator(
     return atoms
 
 
-def set_initial_magmoms(atoms, kind:str="bulk", formula:str=None):
+def set_initial_magmoms(atoms, kind: str = "bulk", formula: str = None):
     """
-    原子に初期磁気モーメントを設定する関数
+    Set initial magnetic moments for atoms
     
     Args:
-        atoms: ASE atoms オブジェクト
-        kind: "gas" / "slab" / "bulk" - 系の種類
-        formula: 分子式 (kindが"gas"の場合に使用)
+        atoms: ASE atoms object
+        kind: "gas" / "slab" / "bulk" - system type
+        formula: Molecular formula (used when kind is "gas")
         
     Returns:
-        atoms: 磁気モーメントが設定されたAtomsオブジェクト
+        atoms: Atoms object with magnetic moments set
     """
-    # 定数を関数内で定義
-    MAG_ELEMENTS = ["Mn", "Fe", "Cr"]  # 初期磁気モーメント 1.0 μB
-    CLOSED_SHELL = ["H2", "H2O"]       # スピン非分極で計算する分子
+    # Define constants within function
+    MAGNETIC_ELEMENTS = ["Mn", "Fe", "Cr"]  # Initial magnetic moment 1.0 μB
+    CLOSED_SHELL_MOLECULES = ["H2", "H2O"]  # Molecules calculated with spin unpolarized
     
     symbols = atoms.get_chemical_symbols()
     
-    # gas相で閉殻分子の場合は全て0に
-    if kind == "gas" and formula in CLOSED_SHELL:
-        init_magmom = [0.0] * len(symbols)
+    # For gas phase closed-shell molecules, set all to 0
+    if kind == "gas" and formula in CLOSED_SHELL_MOLECULES:
+        initial_magmom = [0.0] * len(symbols)
     else:
-        # 磁性元素には1.0 μB, それ以外は0.0を設定
-        init_magmom = [1.0 if x in MAG_ELEMENTS else 0.0 for x in symbols]
+        # Set 1.0 μB for magnetic elements, 0.0 for others
+        initial_magmom = [1.0 if symbol in MAGNETIC_ELEMENTS else 0.0 for symbol in symbols]
     
-    atoms.set_initial_magnetic_moments(init_magmom)
-    return atoms  # 変更後のatomsを返す
+    atoms.set_initial_magnetic_moments(initial_magmom)
+    return atoms
+
 
 def sort_atoms(atoms, axes=("z", "y", "x")):
     """
-    Atoms オブジェクトを指定された軸順（デフォルトは (z, y, x)）でソートします。
+    Sort Atoms object by specified axis order (default is (z, y, x)).
     
     Parameters:
-      atoms (ase.Atoms): ソート対象の原子構造
-      axes (tuple): ソートに用いる軸。例: ("z", "y", "x")
-      
+        atoms (ase.Atoms): Atomic structure to sort
+        axes (tuple): Axes for sorting. Example: ("z", "y", "x")
+        
     Returns:
-      sorted_atoms (ase.Atoms): 指定した軸順にソートされた Atoms オブジェクト
+        sorted_atoms (ase.Atoms): Atoms object sorted by specified axis order
     """
     import numpy as np
     
     axis_map = {"x": 0, "y": 1, "z": 2}
-    pos = atoms.get_positions()  # shape: (n_atoms, 3)
+    positions = atoms.get_positions()  # shape: (n_atoms, 3)
     
-    # lexsort：最後に与えたキーが最優先となるので、axes[::-1] として渡す
-    keys = tuple(pos[:, axis_map[ax]] for ax in axes[::-1])
+    # lexsort: last given key has highest priority, so pass axes[::-1]
+    keys = tuple(positions[:, axis_map[ax]] for ax in axes[::-1])
     sorted_indices = np.lexsort(keys)
     
     sorted_atoms = atoms[sorted_indices]
@@ -328,55 +313,54 @@ def sort_atoms(atoms, axes=("z", "y", "x")):
 
 def slab_to_tensor(slab, grid_size):
     """
-    スラブ構造を、グリッドサイズ [x, y, z] に基づいて 3 次元テンソルに変換します。
+    Convert slab structure to 3D tensor based on grid size [x, y, z].
     
-    ※まず、ソート（axes=("z", "y", "x")）により (z, y, x) の形状に reshape し、
-      その後、x・y 方向に交互に 0 を挿入します。
-    ※さらに、各 z 層で、偶数層（z index even）の場合は基本パターン（even行・even列）、
-      奇数層（z index odd）の場合はシフトしたパターン（odd行・odd列）に配置します。
+    First sorts by (z, y, x) axes to reshape into (z, y, x) format,
+    then inserts 0s alternately in x and y directions.
+    For each z layer, even layers (z index even) use basic pattern (even rows, even columns),
+    odd layers (z index odd) use shifted pattern (odd rows, odd columns).
     
     Parameters:
-      slab (ase.Atoms): 変換対象のスラブ構造（原子数は x*y*z と一致）
-      grid_size (list or tuple): [x, y, z]（例: [8, 8, 3]）
-      
+        slab (ase.Atoms): Slab structure to convert (number of atoms must match x*y*z)
+        grid_size (list or tuple): [x, y, z] (example: [8, 8, 3])
+        
     Returns:
-      tensor (torch.Tensor): interleaved な 3 次元テンソル
-        最終の shape は (z, new_y, new_x) で new_y = 2*y, new_x = 2*x
+        tensor (torch.Tensor): Interleaved 3D tensor
+        Final shape is (z, new_y, new_x) where new_y = 2*y, new_x = 2*x
     """
     import torch
-    import numpy as np
     
     x_size, y_size, z_size = grid_size  # grid_size = [x, y, z]
     total_cells = x_size * y_size * z_size
     
     if len(slab) != total_cells:
-        raise ValueError(f"スラブ内の原子数 {len(slab)} がグリッドセル数 {total_cells} と一致しません")
+        raise ValueError(f"Number of atoms in slab {len(slab)} does not match grid cells {total_cells}")
     
-    # ソートして (z, y, x) の形状に reshape
+    # Sort and reshape to (z, y, x) format
     sorted_slab = sort_atoms(slab, axes=("z", "y", "x"))
     basic_tensor = torch.tensor(
         sorted_slab.get_atomic_numbers(), 
         dtype=torch.int64
     ).reshape(z_size, y_size, x_size)
     
-    # 新しいテンソルのサイズ（x,y方向：2倍）
+    # New tensor size (x,y directions: 2x)
     new_x_size = 2 * x_size
     new_y_size = 2 * y_size
     
-    # z はそのまま
+    # z remains the same
     interleaved = torch.zeros((z_size, new_y_size, new_x_size), dtype=torch.int64)
     
-    # 各 z 層に対して、パターンを設定
+    # Set pattern for each z layer
     for z in range(z_size):
         if z % 2 == 0:
-            # 偶数 z 層（人間の1層目，3層目…）：
-            # 基本テンソルの行 i は、interleaved の行 2*i に配置し、
-            # 列も偶数インデックス (0,2,4,...)
+            # Even z layer (human 1st, 3rd layer...):
+            # Basic tensor row i goes to interleaved row 2*i,
+            # columns also at even indices (0,2,4,...)
             interleaved[z, 0::2, 0::2] = basic_tensor[z, :, :]
         else:
-            # 奇数 z 層（人間の2層目，4層目…）：
-            # 基本テンソルの行 i は、interleaved の行 2*i+1 に配置し、
-            # 列も奇数インデックス (1,3,5,...)
+            # Odd z layer (human 2nd, 4th layer...):
+            # Basic tensor row i goes to interleaved row 2*i+1,
+            # columns also at odd indices (1,3,5,...)
             interleaved[z, 1::2, 1::2] = basic_tensor[z, :, :]
     
     return interleaved
@@ -384,45 +368,44 @@ def slab_to_tensor(slab, grid_size):
 
 def tensor_to_slab(tensor, template_slab):
     """
-    interleaved 状態のテンソルからスラブ構造（ASE Atoms オブジェクト）を復元します。
-    slab_to_tensor の場合、各 z 層について、
-      ・z 層が偶数なら interleaved[z, 0::2, 0::2] の要素が元の原子番号
-      ・z 層が奇数なら interleaved[z, 1::2, 1::2] の要素が元の原子番号
-    となっているので、それぞれ抽出して元の順序（(z, y, x)）に reshape します。
+    Restore slab structure (ASE Atoms object) from interleaved tensor.
+    For slab_to_tensor case, for each z layer:
+      - If z layer is even, interleaved[z, 0::2, 0::2] elements are original atomic numbers
+      - If z layer is odd, interleaved[z, 1::2, 1::2] elements are original atomic numbers
+    Extract each and reshape to original order ((z, y, x)).
     
     Parameters:
-      tensor (torch.Tensor): 3 次元テンソル、shape は (z, new_y, new_x) with new_y = 2*y, new_x = 2*x
-      template_slab (ase.Atoms): 復元先のテンプレート（元のスラブ構造、ソート済みのもの）
-      
+        tensor (torch.Tensor): 3D tensor, shape is (z, new_y, new_x) with new_y = 2*y, new_x = 2*x
+        template_slab (ase.Atoms): Template for restoration (original slab structure, sorted)
+        
     Returns:
-      new_slab (ase.Atoms): tensor の情報を反映して復元されたスラブ構造
+        new_slab (ase.Atoms): Slab structure restored with tensor information
     """
     import torch
-    import numpy as np
     
     z_size, new_y_size, new_x_size = tensor.shape
     
-    # 元の y, x サイズを復元（新サイズは2倍なので）
+    # Restore original y, x sizes (new size is 2x)
     y_size = new_y_size // 2
     x_size = new_x_size // 2
     total_atoms = z_size * y_size * x_size
     
     if total_atoms != len(template_slab):
-        raise ValueError("テンソルから復元する原子数と template_slab の原子数が一致しません")
+        raise ValueError("Number of atoms to restore from tensor does not match template_slab")
     
-    # 用いるリストを各 z 層毎に作成
+    # Create list for each z layer
     reconstructed = []
     for z in range(z_size):
         if z % 2 == 0:
-            # 偶数 z 層：抽出は interleaved[z, 0::2, 0::2]
+            # Even z layer: extract interleaved[z, 0::2, 0::2]
             layer = tensor[z, 0::2, 0::2]
         else:
-            # 奇数 z 層：抽出は interleaved[z, 1::2, 1::2]
+            # Odd z layer: extract interleaved[z, 1::2, 1::2]
             layer = tensor[z, 1::2, 1::2]
-        # layer は shape (y_size, x_size)
+        # layer has shape (y_size, x_size)
         reconstructed.append(layer.flatten())
     
-    # 連結して (z*y_size*x_size,) の 1D 配列にする
+    # Concatenate to (z*y_size*x_size,) 1D array
     new_atomic_nums = torch.cat(reconstructed).numpy()
     
     new_slab = template_slab.copy()
@@ -430,37 +413,38 @@ def tensor_to_slab(tensor, template_slab):
     
     return new_slab
 
+
 def generate_result_csv(
     materials_data: Dict[str, str], 
     output_csv: str = "orr_results.csv",
-    verbose: bool = False
+    verbose: bool = False,
 ) -> str:
     """
-    複数の材料のORR計算結果をCSVファイルにまとめる
+    Compile ORR calculation results for multiple materials into CSV file
     
     Args:
-        materials_data: 材料名とall_results.jsonパスの辞書 {'Pt111': 'path/to/Pt111/all_results.json', ...}
-        output_csv: 出力CSVファイルのパス
-        verbose: 詳細出力の有無
+        materials_data: Dictionary of material names and all_results.json paths 
+                       {'Pt111': 'path/to/Pt111/all_results.json', ...}
+        output_csv: Output CSV file path
+        verbose: Whether to show detailed output
         
     Returns:
-        生成されたCSVファイルのパス
+        Path of generated CSV file
     """
     import json
     import csv
     from pathlib import Path
-    from typing import Dict, List, Tuple, Union, Optional
     from orr_overpotential_calculator.calc_orr_overpotential import compute_reaction_energies, get_overpotential_orr
 
-    # CSV出力用のデータ
+    # Data for CSV output
     csv_data = []
     
-    # 各材料ごとにデータを処理
+    # Process data for each material
     for material_name, json_path in materials_data.items():
         if verbose:
             print(f"Processing {material_name}...")
         
-        # JSONデータの読み込み
+        # Load JSON data
         try:
             with open(json_path, 'r') as f:
                 results = json.load(f)
@@ -468,29 +452,29 @@ def generate_result_csv(
             print(f"Error loading {json_path}: {e}")
             continue
         
-        # スラブのエネルギーを取得
+        # Get slab energy
         E_slab = results["OH"]["E_slab"]
         
-        # 反応エネルギーを計算
+        # Calculate reaction energies
         try:
             deltaEs, energies = compute_reaction_energies(results, E_slab)
             
-            # 過電圧を計算（ファイル出力を避けるためにoutput_dirはNoneに設定可能）
+            # Calculate overpotential (set output_dir to None to avoid file output if needed)
             output_dir = Path(json_path).parent if verbose else None
-            orr_results = get_overpotential_orr(deltaEs, output_dir, verbose=verbose)
+            orr_results = get_overpotential_orr(deltaEs, output_dir, verbose=verbose, save_plot=False)
             
-            # 辞書から値を抽出
+            # Extract values from dictionary
             eta = orr_results["eta"]
             diffG_U0 = orr_results["diffG_U0"]
             diffG_eq = orr_results["diffG_eq"]
             U_L = orr_results["U_L"]
             
-            # 吸着エネルギーを抽出
+            # Extract adsorption energies
             E_ads_OOH = results.get("HO2", {}).get("E_ads_best", None) 
             E_ads_O = results.get("O", {}).get("E_ads_best", None)
             E_ads_OH = results.get("OH", {}).get("E_ads_best", None)
             
-            # 行データを作成
+            # Create row data
             row_data = {
                 "Material": material_name,
                 "E_slab": E_slab,
@@ -524,12 +508,12 @@ def generate_result_csv(
         except Exception as e:
             print(f"Error processing {material_name}: {e}")
     
-    # CSVファイルに書き込み
+    # Write to CSV file
     if not csv_data:
         print("No data to write to CSV!")
         return None
     
-    # ヘッダーを設定（すべてのデータの列を含める）
+    # Set headers (include all data columns)
     fieldnames = list(csv_data[0].keys())
     
     with open(output_csv, 'w', newline='') as csvfile:
@@ -540,10 +524,11 @@ def generate_result_csv(
     print(f"CSV file generated: {output_csv}")
     return output_csv
 
+
 def create_orr_volcano_plot(
     csv_file: Union[str, Path],
     output_file: str = "orr_volcano.png",
-    x_column: str = "dG_OH",  # 変更：E_ads_OHからdG_OHへ
+    x_column: str = "dG_OH",
     y_column: str = "Limiting potential",
     label_column: str = "Material",
     dpi: int = 300,
@@ -552,33 +537,32 @@ def create_orr_volcano_plot(
     ideal_line: float = 1.23,
 ) -> str:
     """
-    ORRの火山プロット (dG_OH vs Limiting potential) を生成する
+    Generate ORR volcano plot (dG_OH vs Limiting potential)
     
     Args:
-        csv_file: 入力CSVファイルのパス
-        output_file: 出力画像のファイル名
-        x_column: x軸に使用する列名
-        y_column: y軸に使用する列名
-        label_column: 凡例に使用する列名
-        dpi: 画像の解像度
-        figsize: 図のサイズ (幅, 高さ) インチ単位
-        markersize: マーカーのサイズ
-        ideal_line: 理想的な限界電位の値 (V)
+        csv_file: Input CSV file path
+        output_file: Output image filename
+        x_column: Column name for x-axis
+        y_column: Column name for y-axis
+        label_column: Column name for legend
+        dpi: Image resolution
+        figsize: Figure size (width, height) in inches
+        markersize: Marker size
+        ideal_line: Ideal limiting potential value (V)
         
     Returns:
-        保存された画像のパス
+        Path of saved image
     """
     import pandas as pd
     import matplotlib.pyplot as plt
     import numpy as np
     from pathlib import Path
-    from typing import Optional, Union
 
-    # CSVファイルの読み込み
+    # Load CSV file
     df = pd.read_csv(csv_file)
     
-    # -------------- dG_OH の計算 -----------------
-    # 定数
+    # -------------- Calculate dG_OH -----------------
+    # Constants
     T = 298.15  # K
 
     # ZPE (eV)
@@ -593,8 +577,8 @@ def create_orr_volcano_plot(
     TS_OHads = 0.0     # eV
 
     # Electronic part ΔE_OH
-    # 反応式: H2O + * -> OH* + 1/2 H2
-    df["E_slab_OH"] = df["E_slab_OH"] - 0.1
+    # Reaction: H2O + * -> OH* + 1/2 H2
+    df["E_slab_OH"] = df["E_slab_OH"] - 0.1 # solvent correction
     df["dE_OH"] = df["E_slab_OH"] - df["E_slab"] - (df["E_H2O_g"] - 0.5 * df["E_H2_g"])
 
     # ZPE difference
@@ -606,13 +590,13 @@ def create_orr_volcano_plot(
     # ΔG_OH
     df["dG_OH"] = df["dE_OH"] + delta_zpe - delta_TS
     
-    # フォントサイズの設定
+    # Set font size
     plt.rcParams.update({'font.size': 12})
     
-    # 図の作成
+    # Create figure
     fig, ax = plt.subplots(figsize=figsize)
     
-    # 各材料ごとにプロット
+    # Plot each material
     scatter = ax.scatter(
         df[x_column], 
         df[y_column], 
@@ -623,7 +607,7 @@ def create_orr_volcano_plot(
         edgecolors='black'
     )
     
-    # 各点にラベルを付ける
+    # Add labels to each point
     for i, label in enumerate(df[label_column]):
         ax.annotate(
             label, 
@@ -634,16 +618,16 @@ def create_orr_volcano_plot(
             fontweight='bold'
         )
     
-    # x軸とy軸の範囲を設定
+    # Set x and y axis ranges
     ax.set_xlim(-0.25, 1.75)
     ax.set_ylim(-0.5, 1.5)
     
-    # 理論線の追加
-    # 理想的な限界電位（1.23V）の水平線
+    # Add theoretical lines
+    # Ideal limiting potential (1.23V) horizontal line
     ax.axhline(y=ideal_line, color='k', linestyle='--', linewidth=1.5, alpha=0.7, 
                label=f'Ideal ({ideal_line} V)')
     
-    # 追加の理論線
+    # Additional theoretical lines
     x_vals = np.linspace(-1, 3, 100)
     
     # OH* -> H2O: y = -x + 1.72
@@ -654,17 +638,17 @@ def create_orr_volcano_plot(
     y_vals_2 = x_vals
     ax.plot(x_vals, y_vals_2, 'k--', alpha=0.7, linewidth=1.5, label='O2 -> HOO*')
     
-    # x = 0.86の垂直線
+    # x = 0.86 vertical line
     ax.axvline(x=0.86, color='k', linestyle='--', linewidth=1.5, alpha=0.7, label='x = 0.86')
     
-    # グラフの設定
+    # Graph settings
     ax.set_xlabel(f'ΔG_OH (eV)', fontsize=14, fontweight='bold')
     ax.set_ylabel(f'{y_column} (V)', fontsize=14, fontweight='bold')
     ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
     ax.grid(True, linestyle='--', alpha=0.6)
     
-    # 凡例の作成
-    # 材料の凡例
+    # Create legends
+    # Material legend
     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=plt.cm.viridis(i/len(df)), 
                           markersize=10, markeredgecolor='black') for i in range(len(df))]
     legend1 = ax.legend(handles, df[label_column], 
@@ -673,13 +657,13 @@ def create_orr_volcano_plot(
                        frameon=True)
     ax.add_artist(legend1)
     
-    # 理論線の凡例
+    # Theoretical lines legend
     ax.legend(loc='lower right')
     
-    # グラフのレイアウト調整
+    # Adjust graph layout
     plt.tight_layout()
     
-    # 画像の保存
+    # Save image
     output_path = Path(output_file)
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
@@ -687,8 +671,21 @@ def create_orr_volcano_plot(
     print(f"Volcano plot saved: {output_path}")
     return str(output_path)
 
+
 def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):
+    """
+    Place adsorbate molecule on cluster surface at specified binding sites.
     
+    Args:
+        cluster: ASE Atoms object 
+        adsorbate: ASE Atoms object representing the adsorbate molecule
+        indices: List of atom indices defining the binding site
+        height: Distance between adsorbate and surface (default: 2.0 Å)
+        orientation: Custom orientation vector for adsorbate placement
+        
+    Returns:
+        ASE Atoms object with adsorbate placed 
+    """
     import numpy as np
     from ase import Atoms
 
@@ -703,43 +700,43 @@ def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):
     elif len(indices) == 2:                           # -------- bridge
         i1, i2 = indices
         p1, p2 = cluster.positions[[i1, i2]]
-        pos       = (p1 + p2) / 2.0
-        edge_vec  = p2 - p1
+        pos = (p1 + p2) / 2.0
+        edge_vec = p2 - p1
         center_vec = pos - cluster_center
 
-        # ① edge_vec に直交し、②外向き成分だけ残した法線
+        # ① perpendicular to edge_vec, ② keep only outward component
         normal = np.cross(edge_vec, np.cross(center_vec, edge_vec))
         if np.linalg.norm(normal) < 1e-6:
-            normal = center_vec.copy()               # 退化時はラジアルを採用
+            normal = center_vec.copy()               # Use radial when degenerate
 
-        # 外向きにそろえる
+        # Align outward
         if np.dot(normal, center_vec) < 0:
             normal = -normal
 
-    elif len(indices) == 3:                           # -------- 3 fold hollow
+    elif len(indices) == 3:                           # -------- 3-fold hollow
         i1, i2, i3 = indices
         p1, p2, p3 = cluster.positions[[i1, i2, i3]]
-        pos    = (p1 + p2 + p3) / 3.0
+        pos = (p1 + p2 + p3) / 3.0
         normal = np.cross(p2 - p1, p3 - p1)
         if np.dot(normal, pos - cluster_center) < 0:
             normal = -normal
 
-    elif len(indices) == 4:                           # -------- 4 fold hollow
+    elif len(indices) == 4:                           # -------- 4-fold hollow
         i1, i2, i3, i4 = indices
         p1, p2, p3, p4 = cluster.positions[[i1, i2, i3, i4]]
-        pos    = (p1 + p2 + p3 + p4) / 4.0
+        pos = (p1 + p2 + p3 + p4) / 4.0
         normal = np.cross(p2 - p1, p3 - p1)
         if np.dot(normal, pos - cluster_center) < 0:
             normal = -normal
 
     else:
-        raise ValueError("indices は 1〜4 個にしてください")
+        raise ValueError("indices should contain 1-4 elements")
 
-    # ------------ 以降は元のロジックと同じ ------------
+    # ------------ Rest follows original logic ------------
     if orientation is not None:
         orientation = np.asarray(orientation, float)
         if np.linalg.norm(orientation) < 1e-6:
-            raise ValueError("orientation ベクトルの長さが 0 です")
+            raise ValueError("orientation vector has zero length")
         normal = orientation
     normal /= np.linalg.norm(normal)
 
@@ -748,17 +745,129 @@ def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):
 
     ads = adsorbate.copy()
     if len(ads) == 0:
-        raise ValueError("adsorbate が空です")
+        raise ValueError("adsorbate is empty")
 
     anchor_pos = ads.positions[0].copy()
-    ads.positions -= anchor_pos                         # アンカー原子を原点へ
+    ads.positions -= anchor_pos                         # Move anchor atom to origin
 
     if len(ads) > 1:
-        v_ads = ads.positions[1]                        # v_ads = 原点→第2原子
-        ads.rotate(v_ads, normal, center=(0, 0, 0))     # 第1–2原子軸を normal に合わす
+        v_ads = ads.positions[1]                        # v_ads = origin→second atom
+        ads.rotate(v_ads, normal, center=(0, 0, 0))     # Align 1st-2nd atom axis to normal
 
-    ads.translate(pos + normal * height)                # 高さ分オフセット
+    ads.translate(pos + normal * height)                # Offset by height
 
     combined = cluster.copy()
     combined += ads
     return combined
+
+
+def plot_free_energy_diagram(
+    csv_file: Union[str, Path],
+    output_file: str = "free_energy_diagram.png",
+    equilibrium_potential: float = 1.23,
+    dpi: int = 300,
+    figsize: tuple = (10, 8),
+    show_u0: bool = True,
+    show_ueq: bool = True,
+    highlight_rds: bool = True,
+) -> str:
+    """
+    Generate combined free energy diagram for multiple materials from CSV data.
+    
+    Args:
+        csv_file: Input CSV file path containing ORR calculation results
+        output_file: Output image filename
+        equilibrium_potential: Equilibrium potential in V (default: 1.23 V)
+        dpi: Image resolution
+        figsize: Figure size (width, height) in inches
+        show_u0: Whether to show U=0V profiles
+        show_ueq: Whether to show U=1.23V profiles
+        highlight_rds: Whether to highlight rate-determining step
+        
+    Returns:
+        Path of saved image
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from pathlib import Path
+    
+    # Load CSV data
+    df = pd.read_csv(csv_file)
+    
+    # Reaction step labels
+    labels = [
+        "O$_2$ + 2H$_2$", 
+        "OOH* + 1.5H$_2$", 
+        "O* + H$_2$O + H$_2$",
+        "OH* + H$_2$O + 0.5H$_2$", 
+        "* + 2H$_2$O"
+    ]
+    steps = np.arange(5)  # 0, 1, 2, 3, 4
+    
+    # Color palette for materials
+    colors = plt.cm.tab10(np.linspace(0, 1, len(df)))
+    
+    # Create figure
+    plt.figure(figsize=figsize)
+    
+    # Process each material
+    for idx, (_, row) in enumerate(df.iterrows()):
+        material_name = row["Material"]
+        overpotential = row["Overpotential"]
+        
+        # Extract pre-calculated dG values from CSV
+        dg_u0 = np.array([row["dG1"], row["dG2"], row["dG3"], row["dG4"]])
+        dg_eq = np.array([row["dG_eq_1"], row["dG_eq_2"], row["dG_eq_3"], row["dG_eq_4"]])
+        
+        # Free energy profiles (cumulative sum starting from 0)
+        g_profile_u0 = np.concatenate(([0.0], np.cumsum(dg_u0)))
+        g_profile_ueq = np.concatenate(([0.0], np.cumsum(dg_eq)))
+        
+        # Shift profiles so final state is at 0
+        g0_shift = g_profile_u0 - g_profile_u0[-1]
+        geq_shift = g_profile_ueq - g_profile_ueq[-1]
+        
+        # Plot profiles
+        color = colors[idx]
+        
+        if show_u0:
+            plt.plot(steps, g0_shift, 'o-', color=color, alpha=0.6, 
+                    label=f"{material_name} (U=0V)", markersize=4, linewidth=2)
+        
+        if show_ueq:
+            plt.plot(steps, geq_shift, 'o--', color=color, 
+                    label=f"{material_name} (U={equilibrium_potential}V)", 
+                    markersize=6, linewidth=2)
+            
+            # Highlight rate-determining step
+            if highlight_rds:
+                rds = np.argmax(dg_eq)  # Find step with maximum dG_eq
+                plt.plot([rds, rds + 1], [geq_shift[rds], geq_shift[rds + 1]],
+                        color=color, linewidth=4, alpha=0.8,
+                        label=f"{material_name} RDS (η={overpotential:.2f}V)")
+    
+    # Formatting
+    plt.xticks(steps, labels, rotation=15, ha='right')
+    plt.ylabel("ΔG (eV, relative)", fontsize=12, fontweight='bold')
+    plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
+    plt.title("4e⁻ ORR Free Energy Diagrams - Material Comparison", 
+              fontsize=14, fontweight='bold')
+    
+    # Grid and legend
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    
+    # Add horizontal line at y=0
+    plt.axhline(y=0, color='black', linestyle='-', alpha=0.5, linewidth=0.8)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save figure
+    output_path = Path(output_file)
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Free energy diagram saved: {output_path}")
+    return str(output_path)

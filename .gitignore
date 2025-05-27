@@ -49,6 +49,14 @@ example/nanoparticle/**/*
 !example/nanoparticle/result/**/*.png
 !example/nanoparticle/result/**/*.txt
 !example/nanoparticle/result/**/*.yaml
+!example/nanoparticle/result/**/*.csv
+
+!example/nanoparticle/code
+!example/nanoparticle/code/**/*.py
+!example/nanoparticle/code/**/*.json
+!example/nanoparticle/code/**/*.png
+!example/nanoparticle/code/**/*.txt
+!example/nanoparticle/code/**/*.yaml
 
 !example/nanoparticle/Pt_nanoparticle_mattersim
 !example/nanoparticle/Pt_nanoparticle_mattersim/**/*.py
@@ -63,3 +71,10 @@ example/nanoparticle/**/*
 !example/nanoparticle/Pt_nanoparticle_vasp/**/*.png
 !example/nanoparticle/Pt_nanoparticle_vasp/**/*.txt
 !example/nanoparticle/Pt_nanoparticle_vasp/**/*.yaml
+
+!example/nanoparticle/Pt_nanoparticle_vasp/*/
+!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.py
+!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.json
+!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.png
+!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.txt
+!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.yaml

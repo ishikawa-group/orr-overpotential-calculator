@@ -1,24 +1,21 @@
-# ナノ粒子触媒のORR過電圧計算
+# ORR Overpotential Calculation for Nanoparticle Catalysts
 
-このディレクトリには、ナノ粒子触媒における酸素還元反応（ORR）の過電圧を計算するサンプルコードが含まれています。
+This directory contains sample code for calculating the overpotential of Oxygen Reduction Reaction (ORR) on nanoparticle catalysts.
 
-## 概要
+## Overview
 
-酸素還元反応（ORR）は、4段階の電子移動プロセスから構成されます：
+The Oxygen Reduction Reaction (ORR) consists of a four-step electron transfer process:
 
 1. `O₂(g) + * + ½H₂ → OOH*`
 2. `OOH* + ½H₂ → O* + H₂O`
 3. `O* + ½H₂ → OH*`
 4. `OH* + ½H₂ → * + H₂O`
 
-このワークフローでは、Ptナノ粒子上でのORR過電圧を計算し、触媒活性を評価します。
+This workflow calculates the ORR overpotential on Pt nanoparticles to evaluate catalytic activity.
 
+## 1. Visualization of Adsorption Structures
 
-
-## 1. 吸着構造の可視化
-
-まず、ナノ粒子上の吸着サイトを理解するために、吸着構造を可視化します。
-
+First, we visualize adsorption structures to understand adsorption sites on nanoparticles:
 
 ```python
 import numpy as np
@@ -28,18 +25,18 @@ from ase.cluster.octahedron import Octahedron
 from orr_overpotential_calculator import place_adsorbate
 import os
 
-# Ptでエッジ長4原子の正八面体クラスターを作成
+# Create an octahedral Pt cluster with edge length of 4 atoms
 cluster = Octahedron('Pt', length=4)  
-print(f"クラスター中の原子数: {len(cluster)}")
+print(f"Number of atoms in cluster: {len(cluster)}")
 
-# 吸着分子OHを定義（O原子が原点、H原子がz方向0.97Åに位置）
+# Define OH adsorbate molecule (O atom at origin, H atom at 0.97Å in z-direction)
 adsorbate = Atoms("OH", positions=[(0, 0, 0), (0, 0, 0.97)])
 
-# 保存先ディレクトリ
+# Output directory
 output_dir = "result"
 os.makedirs(output_dir, exist_ok=True)
 
-# 配置するサイト原子のインデックスリスト
+# List of site atom indices for placement
 site_indices = [
     (0,),           # edge_top
     (0, 1),         # edge_bridge
@@ -48,38 +45,36 @@ site_indices = [
     (1, 2, 12)      # face_3fold_hollow
 ]
 
-# 各site_indexについて構造を作成し画像を保存
+# Create and save structures for each site_index
 for site_index in site_indices:
-    # OH分子を配置（高さ2.0Åで配置）
+    # Place OH molecule at height 2.0Å
     combined_structure = place_adsorbate(cluster, adsorbate, site_index, height=2.0)
-    print(f"Site index {site_index}: 配置後の全原子数: {len(combined_structure)}")
+    print(f"Site index {site_index}: Total atoms after placement: {len(combined_structure)}")
     
-    # ファイル名を作成
+    # Create filename
     site_str = "_".join(map(str, site_index))
     filename = f"cluster_adsorbate_index_{site_str}.png"
     filepath = os.path.join(output_dir, filename)
     
-    # 画像を保存
+    # Save image
     write(filepath, combined_structure, rotation='-90z, 100y, 15x')
-    print(f"保存完了: {filepath}")
+    print(f"Saved: {filepath}")
 ```
 
-### 生成される吸着構造
+### Generated Adsorption Structures
 
-実行後、`result/`ディレクトリに以下の画像が生成されます：
+After execution, the following images will be generated in the `result/` directory:
 
-各サイトタイプの吸着構造が以下のように生成されます：
-
-| サイトタイプ | ファイル名 | 構造 |
+Adsorption structures for each site type:
+| Site Type | Filename | Structure |
 |-------------|-----------|------|
-| エッジトップサイト | `cluster_adsorbate_index_0.png` | ![エッジトップサイト](result/cluster_adsorbate_index_0.png) |
-| エッジブリッジサイト | `cluster_adsorbate_index_0_1.png` | ![エッジブリッジサイト](result/cluster_adsorbate_index_0_1.png) |
-| 面トップサイト | `cluster_adsorbate_index_12.png` | ![面トップサイト](result/cluster_adsorbate_index_12.png) |
-| 面ブリッジサイト | `cluster_adsorbate_index_1_12.png` | ![面ブリッジサイト](result/cluster_adsorbate_index_1_12.png) |
-| 面3配位ホローサイト | `cluster_adsorbate_index_1_2_12.png` | ![面3配位ホローサイト](result/cluster_adsorbate_index_1_2_12.png) |
+| Edge-top site | `cluster_adsorbate_index_0.png` | <img src="result/cluster_adsorbate_index_0.png" width="50%"> |
+| Edge-bridge site | `cluster_adsorbate_index_0_1.png` | <img src="result/cluster_adsorbate_index_0_1.png" width="50%"> |
+| Face-top site | `cluster_adsorbate_index_12.png` | <img src="result/cluster_adsorbate_index_12.png" width="50%"> |
+| Face-bridge site | `cluster_adsorbate_index_1_12.png` | <img src="result/cluster_adsorbate_index_1_12.png" width="50%"> |
+| Face 3-fold hollow site | `cluster_adsorbate_index_1_2_12.png` | <img src="result/cluster_adsorbate_index_1_2_12.png" width="50%"> |
 
-
-## 2. ORR過電圧計算
+## 2. ORR Overpotential Calculation
 
 ### run_nanoparticle_orr.py
 
@@ -90,33 +85,33 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
-# ASEのインポート
+# Import ASE modules
 from ase.build import fcc111
 from ase.cluster.octahedron import Octahedron
 
-# ORR過電圧計算関数をインポート
+# Import ORR overpotential calculation function
 from orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
 
 #---------------------
-# 引数の設定
+# Parameter settings
 #---------------------
 base_dir = str(Path(__file__).parent / "Pt_nanoparticle_mattersim")
-force = True                    # 既存計算の上書き
-log_level = "INFO"             # ログレベル
-calc_type = "mattersim"        # 計算エンジン
-yaml_path = str(Path(__file__).parent / "vasp.yaml")  # 設定ファイル
+force = True                    # Overwrite existing calculations
+log_level = "INFO"              # Logging level
+calc_type = "mattersim"         # Calculation engine
+yaml_path = str(Path(__file__).parent / "vasp.yaml")  # Configuration file
 
-# Ptナノ粒子クラスターの作成（正八面体、エッジ長4原子）
+# Create Pt nanoparticle cluster (octahedron, edge length 4 atoms)
 cluster = Octahedron('Pt', length=4, cutoff=0) 
 
-# 吸着サイトの定義（各吸着種に対して計算するサイトのインデックス）
+# Define adsorption sites (atom indices for each adsorbate species)
 orr_adsorbates: Dict[str, List[Tuple]] = {
-    "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # OOH吸着種
-    "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # O吸着種
-    "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # OH吸着種
+    "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # OOH adsorbate
+    "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # O adsorbate
+    "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # OH adsorbate
 }
 
-# 関数呼び出し：辞書として結果を受け取る
+# Function call: receive results as dictionary
 result = calc_nanoparticle_orr_overpotential(
     nanoparticle=cluster,
     base_dir=base_dir,
@@ -127,7 +122,7 @@ result = calc_nanoparticle_orr_overpotential(
     yaml_path=yaml_path
 )
 
-# 必要な値を辞書から取得
+# Extract required values from the dictionary
 eta = result["eta"]
 diffG_U0 = result["diffG_U0"]
 diffG_eq = result["diffG_eq"]
@@ -137,90 +132,271 @@ print(f"Reaction Free Energy Change at U=0V: {diffG_U0}")
 print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
 ```
 
-### 生成される自由エネルギーダイアグラムの例
+### Example of Generated Free Energy Diagram
 
-計算完了後、以下の様な自由エネルギーダイアグラムが生成されます：
+After completing the calculation, a free energy diagram like the following will be generated:
 
-![ORR自由エネルギーダイアグラム](Pt_nanoparticle_mattersim/ORR_free_energy_diagram.png)
+<img src="Pt_nanoparticle_mattersim/ORR_free_energy_diagram.png" width="75%">
 
+## 3. Calculation Workflow
 
-## 3. 計算の流れ
+### 3.1 Nanoparticle Optimization
+- Structural optimization of octahedral Pt cluster
 
-### 3.1 ナノ粒子の最適化
-- 正八面体Ptクラスター（55原子）の構造最適化
-- 真空層サイズはクラスターサイズに応じて自動調整
+### 3.2 Gas-phase Molecule Optimization
+Optimization of gas-phase structures for:
+- H₂, O₂, H₂O (gas-phase only)
+- OH, OOH, O (gas-phase + adsorption calculations)
 
-### 3.2 気相分子の最適化
-以下の分子の気相構造を最適化：
-- H₂, O₂, H₂O（気相のみ）
-- OH, OOH, O（気相 + 吸着計算）
+### 3.3 Adsorption Calculations
+For each adsorbate (OH, OOH, O), adsorption calculations at five specified sites:
+- `(0,)`: Edge-top site
+- `(0, 1)`: Edge-bridge site
+- `(12,)`: Face-top site
+- `(1, 12)`: Face-bridge site
+- `(1, 2, 12)`: Face 3-fold hollow site
 
-### 3.3 吸着計算
-各吸着種（OH, OOH, O）について、指定した5つのサイトで吸着計算：
-- `(0,)`: エッジのトップサイト
-- `(0, 1)`: エッジのブリッジサイト  
-- `(12,)`: 面のトップサイト
-- `(1, 12)`: 面のブリッジサイト
-- `(1, 2, 12)`: 面の3配位ホローサイト
+### 3.4 Reaction Energy Calculation
+- Select the most stable site for each adsorbate
+- Calculate energies for the four reaction steps (ΔE₁, ΔE₂, ΔE₃, ΔE₄)
+- Apply energy corrections:
+  - O₂ energy correction (DFT error compensation)
+  - Solvent effect corrections (OOH*: -0.1 eV, OH*: -0.2 eV)
 
-### 3.4 反応エネルギー計算
-- 各吸着種の最安定サイトを選択
-- 4段階の反応エネルギー（ΔE₁, ΔE₂, ΔE₃, ΔE₄）を計算
-- エネルギー補正を適用：
-  - O₂エネルギー補正（DFT誤差補償）
-  - 溶媒効果補正（OOH*: -0.1 eV, OH*: -0.2 eV）
+### 3.5 Overpotential Calculation
+- Zero-point energy (ZPE) correction
+- Entropy (T×S) correction
+- Calculate free energy changes (ΔG)
+- Determine limiting potential (U_L) and overpotential (η = 1.23 - U_L)
 
-### 3.5 過電圧計算
-- 零点振動エネルギー（ZPE）補正
-- エントロピー（T×S）補正  
-- 自由エネルギー変化（ΔG）の計算
-- 限界電位（U_L）と過電圧（η = 1.23 - U_L）の算出
+## 4. Output Results
 
-## 4. 出力結果
+### 4.1 Main Output Files
+- `all_results.json`: Integrated data from all calculations
+- `ORR_summary.txt`: Summary of overpotential calculation
+- `ORR_free_energy_diagram.png`: Free energy diagram
 
-### 4.1 ディレクトリ構造
-```
-Pt_nanoparticle_mattersim/
-├── nanoparticle/           # ナノ粒子最適化結果
-├── H2/                     # H₂気相計算
-├── O2/                     # O₂気相計算
-├── H2O/                    # H₂O気相計算
-├── OH/                     # OH計算
-│   ├── OH_gas/            # 気相最適化
-│   └── adsorption/        # 吸着計算（各サイト）
-├── HO2/                    # OOH計算
-└── O/                      # O計算
-```
+### 4.2 Interpreting Results
+- **Overpotential (η)**: Lower values indicate higher activity (ideally 0 V)
+- **Rate-limiting step**: Step with the highest energy barrier in the free energy diagram
+- **Limiting potential (U_L)**: Potential at which all reaction steps become thermodynamically downhill
 
-### 4.2 主要な出力ファイル
-- `all_results.json`: 全計算結果の統合データ
-- `ORR_summary.txt`: 過電圧計算の要約
-- `ORR_free_energy_diagram.png`: 自由エネルギー図
+## 5. Parameter Adjustments
 
-### 4.3 結果の解釈
-- **過電圧（η）**: 小さいほど高活性（理想的には0 V）
-- **律速段階**: 自由エネルギー図で最も高いエネルギー障壁を持つ段階
-- **限界電位（U_L）**: 全反応段階が熱力学的に下り坂になる電位
-
-## 5. パラメータの調整
-
-### 5.1 吸着サイトの変更
-`orr_adsorbates`辞書でサイトインデックスを変更可能：
+### 5.1 Changing Adsorption Sites
+You can modify site indices in the `orr_adsorbates` dictionary:
 
 ```python
 orr_adsorbates = {
-    "HO2": [(0,), (5,), (10,)],  # 特定のサイトのみ
+    "HO2": [(0,), (5,), (10,)],  # Only specific sites
     "O":   [(0,), (1,), (2,)],
     "OH":  [(0,), (1,), (2,)],
 }
 ```
 
-### 5.2 クラスターサイズの変更
+### 5.2 Changing Cluster Size
 ```python
-cluster = Octahedron('Pt', length=3)  # より小さなクラスター
-cluster = Octahedron('Pt', length=5)  # より大きなクラスター
+cluster = Octahedron('Pt', length=3)  # Smaller cluster
+cluster = Octahedron('Pt', length=5)  # Larger cluster
 ```
 
+## 6. Important Notes
+- The `place_adsorbate` function places the adsorbate molecule at the specified site. Therefore, please verify the site selection in advance according to the structure you've created.
+- Different cluster sizes may require different site indices due to atom numbering changes.
 
-## 6. 注意点
-- place_adsorbate関数は吸着分子を指定したサイトに配置します。そのため、作成した構造に合わせて、適宜サイトの選択は事前に確認してください。
+
+## 7. Advanced Options
+
+### 7.1 Custom Height and Orientation
+You can adjust adsorbate placement height and orientation:
+
+```python
+# Place adsorbate at custom height and orientation
+combined_structure = place_adsorbate(
+    cluster, 
+    adsorbate, 
+    indices=(0,), 
+    height=1.8,  # Å
+    orientation=[1, 0, 0]  # Orient along x-axis
+)
+```
+
+### 7.2 Using Different Calculators
+You can switch between different calculation methods:
+
+```python
+# Use VASP calculator
+result = calc_nanoparticle_orr_overpotential(
+    nanoparticle=cluster,
+    calc_type="vasp",
+    yaml_path="path/to/vasp.yaml"
+)
+
+# Use machine learning potential
+result = calc_nanoparticle_orr_overpotential(
+    nanoparticle=cluster,
+    calc_type="mattersim"
+)
+```
+
+## 8. Investigation of Pt Nanoparticle Size Dependence
+
+This section demonstrates how to investigate the effect of Pt nanoparticle size on ORR activity.
+
+### 8.1 Single Size Calculation Example (Length 2)
+
+Here is an example of performing calculations for a Pt nanoparticle of size 2 (length=2):
+
+```python
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+from typing import Dict, Any, List, Tuple
+
+# Import ASE modules
+from ase.build import fcc111
+from ase.cluster.octahedron import Octahedron
+
+# Import ORR overpotential calculation function
+from orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
+
+#---------------------
+# Parameter settings
+base_dir = str(Path(__file__).parent.parent / "Pt_nanoparticle_vasp/length_2")
+force = True
+log_level = "INFO"
+calc_type = "vasp"
+yaml_path = str(Path(__file__).parent / "vasp.yaml")
+#----------------
+
+cluster = Octahedron('Pt', length=2, cutoff=0) 
+
+# Define tuples correctly
+orr_adsorbates: Dict[str, List[Tuple]] = {
+    "HO2": [(0,)], 
+    "O":   [(0,)],
+    "OH":  [(0,)],
+}
+
+# For multiple sites, specify as follows:
+# orr_adsorbates: Dict[str, List[Tuple]] = {
+#     "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+#     "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+#     "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+# }
+
+# Function call: receive results as dictionary
+result = calc_nanoparticle_orr_overpotential(
+    nanoparticle=cluster,
+    base_dir=base_dir,
+    force=force,
+    log_level=log_level,
+    calc_type=calc_type,
+    adsorbates=orr_adsorbates,
+    yaml_path=yaml_path
+)
+
+# Extract required values from the dictionary
+eta = result["eta"]
+diffG_U0 = result["diffG_U0"]
+diffG_eq = result["diffG_eq"]
+
+print(f"ORR overpotential: {eta:.3f} V")
+print(f"Reaction Free Energy Change at U=0V: {diffG_U0}")
+print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
+```
+
+### 8.2 Size Dependence Analysis
+
+To compare calculation results for multiple sizes (length=2~5) of nanoparticles, use the following script:
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Energy diagram plotting script for Pt nanoparticle ORR calculations
+"""
+
+import os
+import sys
+from pathlib import Path
+from typing import Dict
+
+# Import tool modules from ORR calculator
+from orr_overpotential_calculator import generate_result_csv, plot_free_energy_diagram
+
+# Base path settings
+base_dir = str(Path(__file__).parent.parent)
+data_dir = base_dir / "Pt_nanoparticle_vasp"
+result_dir = base_dir / "result"
+
+# Create result directory if it doesn't exist
+result_dir.mkdir(exist_ok=True)
+
+# Output file paths
+csv_path = result_dir / "orr_results_nanoparticles.csv"
+plot_path = result_dir / "free_energy_diagram_nanoparticles.png"
+
+# Collect material data paths
+materials_data = {}
+for length in range(2, 6):  # From length_2 to length_5
+    material_name = f"Pt_nano_length_{length}"
+    json_path = data_dir / f"length_{length}" / "all_results.json"
+    
+    if json_path.exists():
+        materials_data[material_name] = str(json_path)
+        print(f"Found data for {material_name}: {json_path}")
+    else:
+        print(f"Warning: Result file not found: {json_path}")
+
+if not materials_data:
+    print("Error: No data files found!")
+    sys.exit(1)
+
+print(f"Number of materials to process: {len(materials_data)}")
+
+# Generate CSV from results
+csv_file = generate_result_csv(
+    materials_data=materials_data,
+    output_csv=str(csv_path),
+    verbose=True
+)
+
+if not csv_file:
+    print("Error occurred during CSV file generation.")
+    sys.exit(1)
+
+print(f"Generated CSV file: {csv_file}")
+
+# Generate energy diagram
+diagram_path = plot_free_energy_diagram(
+    csv_file=csv_file,
+    output_file=str(plot_path),
+    equilibrium_potential=1.23,
+    dpi=300,
+    figsize=(12, 9),
+    show_u0=True,
+    show_ueq=True,
+    highlight_rds=True
+)
+
+print(f"Generated energy diagram: {diagram_path}")
+print("Processing completed successfully.")
+```
+
+### 8.3 Result Analysis
+
+After calculations, the following files will be generated:
+
+1. `orr_results_nanoparticles.csv` - CSV file summarizing ORR calculation results for each size nanoparticle
+2. `free_energy_diagram_nanoparticles.png` - Graph comparing free energy changes for each size nanoparticle
+
+<img src="result/free_energy_diagram_nanoparticles.png" width="80%">
+
+From the generated graph, you can extract the following information:
+
+- Overpotential (η) values and trends for each size nanoparticle
+- Rate Determining Step (RDS) for each size
+- Comparison of free energy changes at U=0V and U=1.23V
+- Activity differences by size (lower overpotential indicates higher activity)

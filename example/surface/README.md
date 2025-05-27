@@ -1,45 +1,46 @@
-# ORR過電圧計算とVolcano Plot作成手順
+# ORR Overpotential Calculation and Volcano Plot Generation Guide
 
-このディレクトリでは、酸素還元反応（ORR）の過電圧計算とVolcano Plotの作成方法を示します。
+This directory demonstrates how to calculate Oxygen Reduction Reaction (ORR) overpotentials and create volcano plots.
 
-## 概要
+## Overview
 
-酸素還元反応（ORR）は燃料電池の重要な反応です。触媒表面での以下の4段階反応を考慮します：
+The Oxygen Reduction Reaction (ORR) is a crucial reaction in fuel cells. We consider the following 4-step reaction pathway on catalyst surfaces:
 
-1. **O₂ + * + ½H₂ → OOH*** (ΔG₁)
-2. **OOH* + ½H₂ → O* + H₂O** (ΔG₂)  
-3. **O* + ½H₂ → OH*** (ΔG₃)
-4. **OH* + ½H₂ → * + H₂O** (ΔG₄)
+1. `O₂(g) + * + ½H₂ → OOH*`
+2. `OOH* + ½H₂ → O* + H₂O`
+3. `O* + ½H₂ → OH*`
+4. `OH* + ½H₂ → * + H₂O`
 
-過電圧 η は、最も不利な反応段階から決定されます。
+The overpotential η is determined by the most unfavorable reaction step.
 
-## 計算手順
+## Calculation Procedure
 
-### 1. 単一材料のORR過電圧計算
+### 1. Single Material ORR Overpotential Calculation
 
 ````python
+
 #!/usr/bin/env python3
 from pathlib import Path
 from ase.build import fcc111
 from orr_overpotential_calculator import calc_orr_overpotential
 
-# パラメータ設定
+# Parameter settings
 base_dir = str(Path(__file__).parent / "Pt111")
-force = True  # 既存計算を上書き
-calc_type = "vasp"  # または "mattersim"
+force = True  # Overwrite existing calculations
+calc_type = "vasp"  # or "mattersim"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 
-# バルク構造作成（Ptのfcc(111)表面での計算を想定）
+# Create bulk structure (Pt fcc(111) surface calculation)
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
-# 吸着サイト定義
+# Define adsorption sites
 orr_adsorbates = {
     "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)], # ontop, bridge, fcc, hcp
     "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
     "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
 }
 
-# ORR過電圧計算実行
+# Execute ORR overpotential calculation
 result = calc_orr_overpotential(
     bulk=bulk,
     base_dir=base_dir,
@@ -50,7 +51,7 @@ result = calc_orr_overpotential(
     yaml_path=yaml_path
 )
 
-# 結果表示
+# Display results
 eta = result["eta"]
 diffG_U0 = result["diffG_U0"]
 diffG_eq = result["diffG_eq"]
@@ -58,98 +59,111 @@ diffG_eq = result["diffG_eq"]
 print(f"ORR overpotential: {eta:.3f} V")
 print(f"Reaction Free Energy Change at U=0V: {diffG_U0}")
 print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
+
 ````
 
-### 2. 複数材料の結果統合とVolcano Plot作成
+### 2. Multiple Materials Integration and Volcano Plot Creation
 
 ````python
+
 from orr_overpotential_calculator import generate_result_csv, create_orr_volcano_plot
 from pathlib import Path
 
-def main():
-    script_dir = Path(__file__).parent
-    
-    # 材料とJSONファイルパスの対応
-    materials = {
-        "Pt111": script_dir / "Pt111" / "all_results.json",
-        "Pd111": script_dir / "Pd111" / "all_results.json", 
-        "Ir111": script_dir / "Ir111" / "all_results.json",
-        "Rh111": script_dir / "Rh111" / "all_results.json",
-        "Au111": script_dir / "Au111" / "all_results.json",
-    }
-    
-    # 出力ファイルパス
-    output_csv_path = script_dir / "orr_result.csv"
-    output_png_path = script_dir / "orr_volcano_plot.png"
-    
-    # 1. CSVファイル生成
-    generate_result_csv(materials, str(output_csv_path), verbose=True)
-    print(f"CSVファイルが作成されました: {output_csv_path}")
-    
-    # 2. Volcano Plot作成
-    create_orr_volcano_plot(output_csv_path, output_png_path)
-    print(f"Volcano Plotが作成されました: {output_png_path}")
+script_dir = Path(__file__).parent
 
-if __name__ == "__main__":
-    main()
+# Material and JSON file path mapping
+materials = {
+    "Pt111": script_dir / "Pt111" / "all_results.json",
+    "Pd111": script_dir / "Pd111" / "all_results.json", 
+    "Ir111": script_dir / "Ir111" / "all_results.json",
+    "Rh111": script_dir / "Rh111" / "all_results.json",
+    "Au111": script_dir / "Au111" / "all_results.json",
+}
+
+# Output file paths
+output_csv_path = script_dir / "orr_result.csv"
+output_png_path = script_dir / "orr_volcano_plot.png"
+
+# 1. Generate CSV file
+generate_result_csv(materials, str(output_csv_path), verbose=True)
+print(f"CSV file created: {output_csv_path}")
+
+# 2. Create Volcano Plot
+create_orr_volcano_plot(output_csv_path, output_png_path)
+print(f"Volcano Plot created: {output_png_path}")
+
 ````
 
-## 計算の流れ
+## Calculation Workflow
 
-### Phase 1: 構造最適化
-1. **バルク最適化**: 結晶格子定数の決定
-2. **スラブ最適化**: 表面構造の緩和
-3. **ガス分子最適化**: H₂, H₂O, O₂の構造最適化
+### Phase 1: Structure Optimization
+1. **Bulk Optimization**: Determination of crystal lattice parameters
+2. **Slab Optimization**: Surface structure relaxation
+3. **Gas Molecule Optimization**: Structure optimization of H₂, H₂O, O₂
 
-### Phase 2: 吸着計算
-各分子（OH*, O*, OOH*）について：
-- 複数の吸着サイト（ontop, bridge, hollow）での構造最適化
-- 最安定吸着エネルギーの決定
+### Phase 2: Adsorption Calculations
+For each molecule (OH*, O*, OOH*):
+- Structure optimization at multiple adsorption sites (ontop, bridge, hollow)
+- Determination of most stable adsorption energy
 
-### Phase 3: 熱力学解析
-1. **反応エネルギー計算**: 4段階反応のΔE算出
-2. **自由エネルギー補正**: 
-   - ゼロ点エネルギー（ZPE）補正
-   - エントロピー（TΔS）補正
-   - 溶媒補正（OOH*: -0.1 eV, OH*: -0.2 eV）
-3. **過電圧決定**: η = 1.23 - U_L (U_L: 限界電位)
+### Phase 3: Thermodynamic Analysis
+1. **Reaction Energy Calculation**: Calculate ΔE for 4-step reactions
+2. **Free Energy Corrections**: 
+   - Zero-point energy (ZPE) correction
+   - Entropy (TΔS) correction
+   - Solvent correction (OOH*: -0.1 eV, OH*: -0.2 eV)
+3. **Overpotential Determination**: η = 1.23 - U_L (U_L: limiting potential)
 
-## 出力ファイル
+## Important Output Files
 
-### ディレクトリ構造
-```
-material_name/
-├── bulk/                    # バルク計算
-├── slab/                   # スラブ計算  
-├── OH/                     # OH分子
-│   ├── OH_gas/            # ガス相計算
-│   └── adsorption/        # 吸着計算
-├── O/                      # O原子
-└── HO2/                   # HO2分子
-    ├── HO2_gas/
-    └── adsorption/
-        ├── ofst_0.0_0.0/  # ontopサイト
-        ├── ofst_0.5_0.0/  # bridgeサイト
-        └── ofst_0.33_0.33/ # hollowサイト
-        └── ofst_0.66_0.66/ # hollowサイト
-```
+| File | Description |
+|------|-------------|
+| `all_results.json` | Integrated data from all calculations |
+| `orr_result.csv` | Comparative data for multiple materials |
+| `ORR_free_energy_diagram.png` | Free energy diagram |
+| `orr_volcano_plot.png` | Volcano plot |
 
-### 重要な出力ファイル
-- `all_results.json`: 全計算結果の統合データ
-- `orr_result.csv`: 複数材料の比較データ
-- `free_energy_diagram.png`: 自由エネルギー図
-- `orr_volcano_plot.png`: Volcano Plot
+## Generated Volcano Plot Example
 
-# 作成されたVolcano Plotの例
+<img src="result/orr_volcano_plot.png" width="80%">
 
-![ORR Volcano Plot](result/orr_volcano_plot.png)
+## Adsorption Site Definitions
+
+Adsorption sites are specified using fractional coordinates:
+
+| Coordinate | Site Type | Description |
+|------------|-----------|-------------|
+| `(0.0, 0.0)` | Ontop | Directly above a surface atom |
+| `(0.5, 0.0)` | Bridge | Between two surface atoms |
+| `(0.33, 0.33)` | FCC hollow | Three-fold hollow site (FCC stacking) |
+| `(0.66, 0.66)` | HCP hollow | Three-fold hollow site (HCP stacking) |
+
+## Calculation Parameters
+
+### Default Settings
+- **Vacuum thickness**: 30.0 Å (for slab calculations)
+- **Gas box size**: 15.0 Å (for gas molecule calculations)
+- **Initial adsorbate height**: 2.0 Å above surface
+
+### Thermodynamic Corrections
+- **Temperature**: 298.15 K
+- **ZPE corrections**: Applied according to literature values
+- **Entropy corrections**: Temperature-dependent entropy terms
+- **Solvent corrections**: OOH* (-0.1 eV), OH* (-0.2 eV)
+
+## Important Notes
+
+### Calculation Settings
+- The examples use dispersion correction calculations
+- Corresponding solvent effects are configured for dispersion corrections
+- Additional details to be added
+
+### Scheduled to be added
+- ABC...
+
+## References
+
+1. Nørskov, J. K. et al. (2004). Origin of the Overpotential for Oxygen Reduction at a Fuel-Cell Cathode. *J. Phys. Chem. B*, 108, 17886-17892.
+2. Zhang, Q. & Asthagiri, A. (2019). Solvation effects on DFT predictions of ORR activity on metal surfaces. *Catal. Today*, 323, 35-43.
 
 
-## 注意事項
-
-### 計算設定
-- 例では計算に分散力補正を利用しています。またそれに対応した溶媒効果を設定しています。
-- 追記予定
-
-
-```

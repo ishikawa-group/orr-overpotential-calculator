@@ -13,14 +13,15 @@ from .tool import (
     generate_result_csv,
     create_orr_volcano_plot,
     place_adsorbate,
+    plot_free_energy_diagram,
 )
 
 # Essential utilities
 from .calc_orr_energy import (
-    optimize_gas,
-    optimize_bulk,
-    optimize_slab,
-    optimize_nanoparticle,
+    optimize_gas_molecule,
+    optimize_bulk_structure,
+    optimize_slab_structure,
+    optimize_nanoparticle_structure,
 )
 
 __all__ = [
@@ -29,8 +30,8 @@ __all__ = [
     "generate_result_csv",
     "create_orr_volcano_plot",
     "place_adsorbate",
-    "optimize_gas",
-    "optimize_bulk",
-    "optimize_slab", 
-    "optimize_nanoparticle",
+    "optimize_gas_molecule",
+    "optimize_bulk_structure",
+    "optimize_slab_structure", 
+    "optimize_nanoparticle_structure",
 ]
