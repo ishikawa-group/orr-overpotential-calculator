@@ -197,12 +197,4 @@ The package generates several output files in the specified `base_dir`:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-If you encounter any issues or have questions, please open an issue on the GitHub repository.
+ABC...
