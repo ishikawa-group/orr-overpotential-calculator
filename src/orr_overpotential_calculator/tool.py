@@ -596,22 +596,29 @@ def create_orr_volcano_plot(
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
     
-    # Plot each material
-    scatter = ax.scatter(
-        df[x_column], 
-        df[y_column], 
-        c=range(len(df)), 
-        cmap='viridis', 
-        s=markersize, 
-        alpha=0.8,
-        edgecolors='black'
-    )
+    # Set colormap
+    cmap = plt.cm.viridis
+    norm = plt.Normalize(0, len(df) - 1)
+    
+    # Plot each material with explicitly defined colors
+    colors = [cmap(norm(i)) for i in range(len(df))]
+    
+    for i, (_, row) in enumerate(df.iterrows()):
+        ax.scatter(
+            row[x_column],
+            row[y_column],
+            color=colors[i],
+            s=markersize,
+            alpha=0.8,
+            edgecolor='black',
+            label=row[label_column]
+        )
     
     # Add labels to each point
-    for i, label in enumerate(df[label_column]):
+    for i, (_, row) in enumerate(df.iterrows()):
         ax.annotate(
-            label, 
-            (df[x_column].iloc[i], df[y_column].iloc[i]),
+            row[label_column], 
+            (row[x_column], row[y_column]),
             xytext=(5, 5), 
             textcoords='offset points',
             fontsize=10,
@@ -647,10 +654,9 @@ def create_orr_volcano_plot(
     ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
     ax.grid(True, linestyle='--', alpha=0.6)
     
-    # Create legends
     # Material legend
-    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=plt.cm.viridis(i/len(df)), 
-                          markersize=10, markeredgecolor='black') for i in range(len(df))]
+    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], 
+                        markersize=10, markeredgecolor='black') for i in range(len(df))]
     legend1 = ax.legend(handles, df[label_column], 
                        title='Materials',
                        loc='upper right',
@@ -658,7 +664,15 @@ def create_orr_volcano_plot(
     ax.add_artist(legend1)
     
     # Theoretical lines legend
-    ax.legend(loc='lower right')
+    handles2, labels2 = [], []
+    for line in ax.lines:
+        if line.get_label() and not line.get_label().startswith('_'):
+            handles2.append(line)
+            labels2.append(line.get_label())
+    
+    legend2 = ax.legend(handles2, labels2, 
+                       loc='lower right',
+                       frameon=True)
     
     # Adjust graph layout
     plt.tight_layout()
@@ -769,10 +783,11 @@ def plot_free_energy_diagram(
     figsize: tuple = (10, 8),
     show_u0: bool = True,
     show_ueq: bool = True,
-    highlight_rds: bool = True,
+    material_name: Optional[str] = None,
 ) -> str:
     """
     Generate combined free energy diagram for multiple materials from CSV data.
+    Displays energy levels as horizontal lines connected by dashed lines.
     
     Args:
         csv_file: Input CSV file path containing ORR calculation results
@@ -782,7 +797,7 @@ def plot_free_energy_diagram(
         figsize: Figure size (width, height) in inches
         show_u0: Whether to show U=0V profiles
         show_ueq: Whether to show U=1.23V profiles
-        highlight_rds: Whether to highlight rate-determining step
+        material_name: Optional specific material name to plot (from CSV)
         
     Returns:
         Path of saved image
@@ -795,6 +810,13 @@ def plot_free_energy_diagram(
     # Load CSV data
     df = pd.read_csv(csv_file)
     
+    # Filter by material_name if specified
+    if material_name is not None:
+        filtered_df = df[df["Material"] == material_name]
+        if len(filtered_df) == 0:
+            raise ValueError(f"Material '{material_name}' not found in CSV file")
+        df = filtered_df
+    
     # Reaction step labels
     labels = [
         "O$_2$ + 2H$_2$", 
@@ -806,58 +828,144 @@ def plot_free_energy_diagram(
     steps = np.arange(5)  # 0, 1, 2, 3, 4
     
     # Color palette for materials
-    colors = plt.cm.tab10(np.linspace(0, 1, len(df)))
+    if material_name is not None:
+        # Use fixed colors for single material mode
+        u0_color = 'black'      # Black
+        ul_color = 'blue'       # Blue
+        ueq_color = 'green'     # Green
+        colors = [None]  # Dummy (not used)
+    else:
+        # Use different colors for each material in multi-material mode
+        colors = [plt.cm.tab10(i) for i in range(len(df))]
     
     # Create figure
     plt.figure(figsize=figsize)
     
+    # Horizontal line width (extension from reaction coordinate)
+    line_width = 0.3
+    
     # Process each material
     for idx, (_, row) in enumerate(df.iterrows()):
-        material_name = row["Material"]
-        overpotential = row["Overpotential"]
+        material_name_row = row["Material"]
+        limiting_potential = row["Limiting potential"]
         
         # Extract pre-calculated dG values from CSV
         dg_u0 = np.array([row["dG1"], row["dG2"], row["dG3"], row["dG4"]])
         dg_eq = np.array([row["dG_eq_1"], row["dG_eq_2"], row["dG_eq_3"], row["dG_eq_4"]])
         
+        # Calculate dG_UL using U_L (Limiting potential)
+        dg_ul = dg_u0 + limiting_potential
+        
         # Free energy profiles (cumulative sum starting from 0)
         g_profile_u0 = np.concatenate(([0.0], np.cumsum(dg_u0)))
         g_profile_ueq = np.concatenate(([0.0], np.cumsum(dg_eq)))
+        g_profile_ul = np.concatenate(([0.0], np.cumsum(dg_ul)))
         
         # Shift profiles so final state is at 0
         g0_shift = g_profile_u0 - g_profile_u0[-1]
         geq_shift = g_profile_ueq - g_profile_ueq[-1]
+        gul_shift = g_profile_ul - g_profile_ul[-1]
         
-        # Plot profiles
-        color = colors[idx]
+        # Color selection for each material
+        if material_name is not None:
+            # Single material mode: fixed colors
+            color_u0 = u0_color
+            color_ul = ul_color
+            color_ueq = ueq_color
+        else:
+            # Multi-material mode: same color for each material
+            color_u0 = colors[idx]
+            color_ul = colors[idx]
+            color_ueq = colors[idx]
         
+        # Labels for legend
+        if material_name is not None:
+            u0_label = "U = 0V" if show_u0 else None
+            ueq_label = f"U = {equilibrium_potential}V" if show_ueq else None
+            ul_label = f"U$_{{L}}$ = {limiting_potential:.2f}V"
+        else:
+            u0_label = f"{material_name_row} (U=0V)" if show_u0 else None
+            ueq_label = f"{material_name_row} (U={equilibrium_potential}V)" if show_ueq else None
+            ul_label = f"{material_name_row} (U$_{{L}}$={limiting_potential:.2f}V)"
+        
+        # ------ U=0V profile ------
         if show_u0:
-            plt.plot(steps, g0_shift, 'o-', color=color, alpha=0.6, 
-                    label=f"{material_name} (U=0V)", markersize=4, linewidth=2)
-        
-        if show_ueq:
-            plt.plot(steps, geq_shift, 'o--', color=color, 
-                    label=f"{material_name} (U={equilibrium_potential}V)", 
-                    markersize=6, linewidth=2)
+            # Show label only for first point
+            plt.hlines(g0_shift[0], steps[0]-line_width, steps[0]+line_width,
+                      color=color_u0, alpha=0.6, linewidth=2.5, label=u0_label)
             
-            # Highlight rate-determining step
-            if highlight_rds:
-                rds = np.argmax(dg_eq)  # Find step with maximum dG_eq
-                plt.plot([rds, rds + 1], [geq_shift[rds], geq_shift[rds + 1]],
-                        color=color, linewidth=4, alpha=0.8,
-                        label=f"{material_name} RDS (η={overpotential:.2f}V)")
+            # Horizontal lines for remaining points (no label)
+            for i in range(1, len(steps)):
+                plt.hlines(g0_shift[i], steps[i]-line_width, steps[i]+line_width,
+                          color=color_u0, alpha=0.6, linewidth=2.5)
+            
+            # Dashed line connections between consecutive points
+            for i in range(len(steps)-1):
+                plt.plot([steps[i]+line_width, steps[i+1]-line_width], 
+                         [g0_shift[i], g0_shift[i+1]], 
+                         '--', color=color_u0, alpha=0.6, linewidth=1.0)
+                         
+            # Add markers
+            plt.plot(steps, g0_shift, 'o', color=color_u0, alpha=0.6, 
+                    markersize=4, linestyle='none')
+            
+        # ------ U=U_L profile ------
+        # Show label only for first point
+        plt.hlines(gul_shift[0], steps[0]-line_width, steps[0]+line_width,
+                  color=color_ul, linewidth=2.5, label=ul_label)
+        
+        # Horizontal lines for remaining points (no label)
+        for i in range(1, len(steps)):
+            plt.hlines(gul_shift[i], steps[i]-line_width, steps[i]+line_width,
+                      color=color_ul, linewidth=2.5)
+        
+        # Dashed line connections between consecutive points
+        for i in range(len(steps)-1):
+            plt.plot([steps[i]+line_width, steps[i+1]-line_width], 
+                     [gul_shift[i], gul_shift[i+1]], 
+                     '--', color=color_ul, linewidth=1.0)
+                     
+        # Add markers
+        plt.plot(steps, gul_shift, 's', color=color_ul, markersize=5, linestyle='none')
+        
+        # ------ U=1.23V profile ------
+        if show_ueq:
+            # Show label only for first point
+            plt.hlines(geq_shift[0], steps[0]-line_width, steps[0]+line_width,
+                      color=color_ueq, alpha=0.8, linewidth=2.5, label=ueq_label)
+            
+            # Horizontal lines for remaining points (no label)
+            for i in range(1, len(steps)):
+                plt.hlines(geq_shift[i], steps[i]-line_width, steps[i]+line_width,
+                          color=color_ueq, alpha=0.8, linewidth=2.5)
+            
+            # Dashed line connections between consecutive points
+            for i in range(len(steps)-1):
+                plt.plot([steps[i]+line_width, steps[i+1]-line_width], 
+                         [geq_shift[i], geq_shift[i+1]], 
+                         '--', color=color_ueq, alpha=0.8, linewidth=1.0)
+                         
+            # Add markers
+            plt.plot(steps, geq_shift, 'o', color=color_ueq, alpha=0.8, 
+                    markersize=6, linestyle='none')
     
     # Formatting
     plt.xticks(steps, labels, rotation=15, ha='right')
     plt.ylabel("ΔG (eV, relative)", fontsize=12, fontweight='bold')
     plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
-    plt.title("4e⁻ ORR Free Energy Diagrams - Material Comparison", 
-              fontsize=14, fontweight='bold')
+    
+    # Title setting
+    if material_name is not None:
+        plt.title(f"{material_name} - ORR Free Energy Diagram", 
+                fontsize=14, fontweight='bold')
+    else:
+        plt.title("4e⁻ ORR Free Energy Diagrams - Material Comparison", 
+                fontsize=14, fontweight='bold')
     
     # Grid and legend
     plt.grid(True, linestyle='--', alpha=0.3)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
-    
+    plt.legend(loc='upper right', fontsize=10)
+
     # Add horizontal line at y=0
     plt.axhline(y=0, color='black', linestyle='-', alpha=0.5, linewidth=0.8)
     

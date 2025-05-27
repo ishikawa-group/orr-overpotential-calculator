@@ -316,6 +316,7 @@ To compare calculation results for multiple sizes (length=2~5) of nanoparticles,
 
 """
 Energy diagram plotting script for Pt nanoparticle ORR calculations
+Generate individual energy diagrams for each material
 """
 
 import os
@@ -327,7 +328,7 @@ from typing import Dict
 from orr_overpotential_calculator import generate_result_csv, plot_free_energy_diagram
 
 # Base path settings
-base_dir = str(Path(__file__).parent.parent)
+base_dir = Path(__file__).parent.parent
 data_dir = base_dir / "Pt_nanoparticle_vasp"
 result_dir = base_dir / "result"
 
@@ -336,7 +337,6 @@ result_dir.mkdir(exist_ok=True)
 
 # Output file paths
 csv_path = result_dir / "orr_results_nanoparticles.csv"
-plot_path = result_dir / "free_energy_diagram_nanoparticles.png"
 
 # Collect material data paths
 materials_data = {}
@@ -369,20 +369,39 @@ if not csv_file:
 
 print(f"Generated CSV file: {csv_file}")
 
-# Generate energy diagram
+# 1. First create comparison plot with all materials
+comparison_plot_path = result_dir / "free_energy_diagram_comparison.png"
 diagram_path = plot_free_energy_diagram(
     csv_file=csv_file,
-    output_file=str(plot_path),
+    output_file=str(comparison_plot_path),
     equilibrium_potential=1.23,
     dpi=300,
     figsize=(12, 9),
     show_u0=True,
     show_ueq=True,
-    highlight_rds=True
 )
+print(f"Generated comparison energy diagram: {diagram_path}")
 
-print(f"Generated energy diagram: {diagram_path}")
-print("Processing completed successfully.")
+# 2. Create individual plots for each material
+for material_name in materials_data.keys():
+    # Include material name in output filename
+    individual_plot_path = result_dir / f"free_energy_diagram_{material_name}.png"
+    
+    # Generate individual energy diagram for each material
+    individual_diagram_path = plot_free_energy_diagram(
+        csv_file=csv_file,
+        output_file=str(individual_plot_path),
+        equilibrium_potential=1.23,
+        dpi=300,
+        figsize=(10, 8),
+        show_u0=True,
+        show_ueq=True,
+        material_name=material_name,  # Specify individual material name
+    )
+    
+    print(f"Generated energy diagram for {material_name}: {individual_diagram_path}")
+
+print("All processing completed successfully.")
 ```
 
 ### 8.3 Result Analysis
@@ -393,6 +412,16 @@ After calculations, the following files will be generated:
 2. `free_energy_diagram_nanoparticles.png` - Graph comparing free energy changes for each size nanoparticle
 
 <img src="result/free_energy_diagram_nanoparticles.png" width="80%">
+
+### Individual Results by Nanoparticle Size
+
+| Length | Structure example | Free Energy Diagram |
+|--------|-----------|-------------------|
+| 2 | <img src="result/Pt_nanoparticle_length_2_site_0.png" width="80%"> | <img src="result/free_energy_diagram_Pt_nano_length_2.png" width="60%"> |
+| 3 | <img src="result/Pt_nanoparticle_length_3_site_2.png" width="80%"> | <img src="result/free_energy_diagram_Pt_nano_length_3.png" width="60%"> |
+| 4 | <img src="result/Pt_nanoparticle_length_4_site_0.png" width="80%"> | <img src="result/free_energy_diagram_Pt_nano_length_4.png" width="60%"> |
+| 5 | <img src="result/Pt_nanoparticle_length_5_site_2.png" width="80%"> | <img src="result/free_energy_diagram_Pt_nano_length_5.png" width="60%"> |
+
 
 From the generated graph, you can extract the following information:
 

@@ -433,54 +433,131 @@ def get_overpotential_orr(
     # Free energy profiles
     g_profile_u0 = np.concatenate(([0.0], np.cumsum(delta_g_u0)))
     equilibrium_potential = 1.23  # V
-    g_profile_ueq = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * equilibrium_potential
-
+    
     # Calculate step-wise free energy changes
     diff_g_u0 = np.diff(g_profile_u0)
-    diff_g_eq = np.diff(g_profile_ueq)
-
+    
     # Find limiting potential and overpotential
     g_orr = np.max(diff_g_u0)
     limiting_potential = abs(g_orr)
     overpotential = equilibrium_potential - limiting_potential
+
+    # Calculate profiles for U=1.23V and U=limiting potential
+    g_profile_ueq = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * equilibrium_potential
+    g_profile_ul = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * limiting_potential
+    diff_g_eq = np.diff(g_profile_ueq)
+    diff_g_ul = np.diff(g_profile_ul)
 
     # Generate free-energy diagram plot
     if save_plot:
         try:
             import matplotlib.pyplot as plt
             
+            # Reaction step labels
             labels = [
                 "O$_2$ + 2H$_2$", "OOH* + 1.5H$_2$", "O* + H$_2$O + H$_2$",
                 "OH* + H$_2$O + 0.5H$_2$", "* + 2H$_2$O",
             ]
+            
+            # Steps and relative profiles
             steps = np.arange(reaction_count + 1)
             g0_shift = g_profile_u0 - g_profile_u0[-1]
             geq_shift = g_profile_ueq - g_profile_ueq[-1]
+            gul_shift = g_profile_ul - g_profile_ul[-1]
+            
+            # Colors for different potential profiles
+            u0_color = 'black'    # U=0V is black
+            ueq_color = 'green'   # U=1.23V is green
+            ul_color = 'blue'     # U=UL is blue
+            
+            # Horizontal line width
+            line_width = 0.3
+            
+            # Create figure
+            plt.figure(figsize=(8, 7))
+            
+            # ------ U=0V profile ------
+            # First point with label
+            plt.hlines(g0_shift[0], steps[0]-line_width, steps[0]+line_width,
+                      color=u0_color, alpha=0.6, linewidth=2.5, label="U = 0 V")
+            
+            # Remaining points without label
+            for i in range(1, len(steps)):
+                plt.hlines(g0_shift[i], steps[i]-line_width, steps[i]+line_width,
+                          color=u0_color, alpha=0.6, linewidth=2.5)
+            
+            # Connect points with dashed lines
+            for i in range(len(steps)-1):
+                plt.plot([steps[i]+line_width, steps[i+1]-line_width], 
+                         [g0_shift[i], g0_shift[i+1]], 
+                         '--', color=u0_color, alpha=0.6, linewidth=1.0)
+                         
+            # Add markers
+            plt.plot(steps, g0_shift, 'o', color=u0_color, alpha=0.6, 
+                    markersize=4, linestyle='none')
 
-            plt.figure(figsize=(7, 6))
-            plt.plot(steps, g0_shift, "o-", label="U = 0 V", markersize=6)
-            plt.plot(steps, geq_shift, "o-", label=f"U = {equilibrium_potential} V", markersize=6)
+            # ------ U=UL (Limiting Potential) profile ------
+            # First point with label
+            plt.hlines(gul_shift[0], steps[0]-line_width, steps[0]+line_width,
+                      color=ul_color, linewidth=2.5, 
+                      label=f"U$_{{L}}$ = {limiting_potential:.2f} V")
             
-            # Highlight rate-determining step
-            rds = np.argmax(diff_g_eq)
-            plt.plot(
-                [rds, rds + 1],
-                [geq_shift[rds], geq_shift[rds + 1]],
-                "r-",
-                linewidth=2.5,
-                label=f"RDS (η = {overpotential:.2f} V)",
-            )
+            # Remaining points without label
+            for i in range(1, len(steps)):
+                plt.hlines(gul_shift[i], steps[i]-line_width, steps[i]+line_width,
+                          color=ul_color, linewidth=2.5)
             
-            plt.xticks(steps, labels, rotation=15)
-            plt.ylabel("ΔG (eV, relative)")
-            plt.title("4e⁻ ORR Free-Energy Diagram")
-            plt.legend()
-            plt.grid(True, ls="--", alpha=0.5)
+            # Connect points with dashed lines
+            for i in range(len(steps)-1):
+                plt.plot([steps[i]+line_width, steps[i+1]-line_width], 
+                         [gul_shift[i], gul_shift[i+1]], 
+                         '--', color=ul_color, linewidth=1.0)
+                         
+            # Add markers
+            plt.plot(steps, gul_shift, 's', color=ul_color, 
+                    markersize=5, linestyle='none')
+            
+                                
+            # ------ U=Equilibrium (1.23V) profile ------
+            # First point with label
+            plt.hlines(geq_shift[0], steps[0]-line_width, steps[0]+line_width,
+                      color=ueq_color, alpha=0.8, linewidth=2.5, 
+                      label=f"U = {equilibrium_potential} V")
+            
+            # Remaining points without label
+            for i in range(1, len(steps)):
+                plt.hlines(geq_shift[i], steps[i]-line_width, steps[i]+line_width,
+                          color=ueq_color, alpha=0.8, linewidth=2.5)
+            
+            # Connect points with dashed lines
+            for i in range(len(steps)-1):
+                plt.plot([steps[i]+line_width, steps[i+1]-line_width], 
+                         [geq_shift[i], geq_shift[i+1]], 
+                         '--', color=ueq_color, alpha=0.8, linewidth=1.0)
+                         
+            # Add markers
+            plt.plot(steps, geq_shift, 'o', color=ueq_color, alpha=0.8, 
+                    markersize=6, linestyle='none')
+                    
+            
+            # Formatting
+            plt.xticks(steps, labels, rotation=15, ha='right')
+            plt.ylabel("ΔG (eV, relative)", fontsize=12, fontweight='bold')
+            plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
+            plt.title("4e⁻ ORR Free-Energy Diagram", fontsize=14, fontweight='bold')
+            plt.grid(True, linestyle='--', alpha=0.3)
+            
+            # Add legend and horizontal zero line
+            plt.legend(loc='upper right', fontsize=10)
+            plt.axhline(y=0, color='black', linestyle='-', alpha=0.5, linewidth=0.8)
+            
             plt.tight_layout()
             
+            # Save figure
             figure_path = output_dir / "ORR_free_energy_diagram.png"
-            plt.savefig(figure_path, dpi=300)
+            plt.savefig(figure_path, dpi=300, bbox_inches='tight')
             plt.close()
+            
             logger.info("Saved diagram → %s", figure_path)
         except Exception as exc:
             logger.warning("Plotting failed: %s", exc)
@@ -498,7 +575,8 @@ def get_overpotential_orr(
         "diffG_eq": diff_g_eq.tolist(),
         "U_L": limiting_potential,
         "G_profile_U0": g_profile_u0.tolist(),
-        "G_profile_Ueq": g_profile_ueq.tolist()
+        "G_profile_Ueq": g_profile_ueq.tolist(),
+        "G_profile_UL": g_profile_ul.tolist()
     }
 
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 def main():
     # スクリプトのディレクトリを取得
-    script_dir = Path(__file__).parent
+    script_dir = Path(__file__).parent.parent
     
     # 材料名とJSONファイルのパスを辞書で指定
     materials = {
@@ -15,8 +15,8 @@ def main():
     }
     
     # 出力ファイルのパスをスクリプトと同じディレクトリに指定
-    output_csv_path = script_dir / "orr_result.csv"
-    output_png_path = script_dir / "orr_volcano_plot.png"
+    output_csv_path = script_dir / "result/orr_result.csv"
+    output_png_path = script_dir / "result/orr_volcano_plot.png"
     
     # CSVファイルを生成
     output_file = generate_result_csv(materials, str(output_csv_path), verbose=True)
