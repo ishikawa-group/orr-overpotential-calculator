@@ -13,27 +13,27 @@ from orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
 
 #---------------------
 # 引数の設定
-base_dir = str(Path(__file__).parent.parent / "Pt_nanoparticle_vasp/length_4")
+base_dir = str(Path(__file__).parent.parent / "Pt_nanoparticle_mattersim")
 force = True
 log_level = "INFO"
-calc_type = "vasp"
+calc_type = "mattersim"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 #----------------
 
 cluster = Octahedron('Pt', length=4, cutoff=0) 
 
 # 修正: タプルを正しく定義
-orr_adsorbates: Dict[str, List[Tuple]] = {
-    "HO2": [(0,)], # カンマを追加してタプル化
-    "O":   [(0,)],
-    "OH":  [(0,)],
-}
-
 #orr_adsorbates: Dict[str, List[Tuple]] = {
-#    "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)], # カンマを追加してタプル化
-#    "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-#    "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+#    "HO2": [(0,)], # カンマを追加してタプル化
+#    "O":   [(0,)],
+#    "OH":  [(0,)],
 #}
+
+orr_adsorbates: Dict[str, List[Tuple]] = {
+    "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)], # カンマを追加してタプル化
+    "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+    "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+}
 
 # 関数呼び出し：辞書として結果を受け取る
 result = calc_nanoparticle_orr_overpotential(
