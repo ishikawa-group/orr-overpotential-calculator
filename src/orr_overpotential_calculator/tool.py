@@ -951,7 +951,7 @@ def plot_free_energy_diagram(
     
     # Formatting
     plt.xticks(steps, labels, rotation=15, ha='right')
-    plt.ylabel("ΔG (eV, relative)", fontsize=12, fontweight='bold')
+    plt.ylabel("ΔG (eV)", fontsize=12, fontweight='bold')
     plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
     
     # Title setting

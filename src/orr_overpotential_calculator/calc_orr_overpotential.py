@@ -542,7 +542,7 @@ def get_overpotential_orr(
             
             # Formatting
             plt.xticks(steps, labels, rotation=15, ha='right')
-            plt.ylabel("ΔG (eV, relative)", fontsize=12, fontweight='bold')
+            plt.ylabel("ΔG (eV)", fontsize=12, fontweight='bold')
             plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
             plt.title("4e⁻ ORR Free-Energy Diagram", fontsize=14, fontweight='bold')
             plt.grid(True, linestyle='--', alpha=0.3)
