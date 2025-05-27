@@ -24,7 +24,7 @@ from typing import Dict, Any, List, Tuple
 import numpy as np
 from ase import Atoms
 from ase.build import fcc111, add_adsorbate
-from ase.io import read
+from ase.io import read, write
 
 # External helper functions
 from .calc_orr_energy import (
@@ -623,11 +623,17 @@ def calc_orr_overpotential(
     base_path = Path(base_dir).resolve()
     base_path.mkdir(parents=True, exist_ok=True)
 
+    # vaspでない場合はbulkディレクトリを作成
+    if calc_type != "vasp":
+        bulk_dir = base_path / "bulk"
+        bulk_dir.mkdir(parents=True, exist_ok=True)
+
     # 1. Bulk optimization
     logger.info("Optimizing bulk structure...")
     optimized_bulk, bulk_energy = optimize_bulk_structure(
         bulk, str(base_path / "bulk"), calc_type, yaml_path
     )
+    write(str(base_path / "bulk" / "optimized_bulk.xyz"), optimized_bulk)
 
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
@@ -695,6 +701,11 @@ def calc_nanoparticle_orr_overpotential(
     base_path = Path(base_dir).resolve()
     base_path.mkdir(parents=True, exist_ok=True)
 
+    # vaspでない場合はnanoparticleディレクトリを作成
+    if calc_type != "vasp":
+        nanoparticle_dir = base_path / "nanoparticle"
+        nanoparticle_dir.mkdir(parents=True, exist_ok=True)    
+
     # 1. Nanoparticle optimization
     logger.info("Optimizing nanoparticle...")
 
@@ -709,6 +720,8 @@ def calc_nanoparticle_orr_overpotential(
     optimized_nanoparticle, nanoparticle_energy = optimize_nanoparticle_structure(
         nanoparticle, gas_box, str(base_path / "nanoparticle"), calc_type, yaml_path
     )
+
+    write(str(base_path / "nanoparticle" / "optimized_nanoparticle.xyz"), optimized_nanoparticle)
 
     # 2. Gas and adsorption calculations (index scheme)
     logger.info("Running required molecule calculations...")
