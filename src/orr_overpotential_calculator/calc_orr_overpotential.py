@@ -438,8 +438,8 @@ def get_overpotential_orr(
     diff_g_u0 = np.diff(g_profile_u0)
     
     # Find limiting potential and overpotential
-    g_orr = np.max(diff_g_u0)
-    limiting_potential = abs(g_orr)
+    dg_orr_max = np.max(diff_g_u0)
+    limiting_potential = (-1) * dg_orr_max
     overpotential = equilibrium_potential - limiting_potential
 
     # Calculate profiles for U=1.23V and U=limiting potential
@@ -628,6 +628,11 @@ def calc_orr_overpotential(
         bulk_dir = base_path / "bulk"
         bulk_dir.mkdir(parents=True, exist_ok=True)
 
+    # vaspでない場合はslabディレクトリを作成
+    if calc_type != "vasp":
+        slab_dir = base_path / "slab"
+        slab_dir.mkdir(parents=True, exist_ok=True)
+
     # 1. Bulk optimization
     logger.info("Optimizing bulk structure...")
     optimized_bulk, bulk_energy = optimize_bulk_structure(
@@ -640,6 +645,7 @@ def calc_orr_overpotential(
     optimized_slab, slab_energy = optimize_slab_structure(
         optimized_bulk, str(base_path / "slab"), calc_type, yaml_path
     )
+    write(str(base_path / "slab" / "optimized_slab.xyz"), optimized_slab)
 
     # 3. Gas and adsorption calculations (offset scheme)
     logger.info("Running required molecule calculations...")

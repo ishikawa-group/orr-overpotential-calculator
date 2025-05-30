@@ -247,6 +247,11 @@ def my_calculator(
         # Perform structure optimization
         optimizer = FIRE(atoms)
         optimizer.run(fmax=0.05, steps=300)
+
+        if isinstance(atoms, ExpCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
         
     else:
         raise ValueError("calc_type must be 'vasp' or 'mattersim'")

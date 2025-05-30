@@ -20,6 +20,7 @@ common:
   lasph: true
   isym: 0
   potim: 0.2
+  ivdw: 12
   # directory: # Python側で設定
 
 kinds:
