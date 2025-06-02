@@ -59,7 +59,7 @@ MOLECULES = {
 CLOSED_SHELL_MOLECULES = ["H2", "H2O"]
 
 # Structural parameters (all in Angstroms)
-SLAB_VACUUM = 30.0      # Vacuum layer thickness for slab calculations
+SLAB_VACUUM = 15.0      # Vacuum layer thickness for slab calculations
 GAS_BOX = 15.0          # Box size for gas phase calculations
 ADSORBATE_HEIGHT = 2.0  # Initial height of adsorbate above surface
 

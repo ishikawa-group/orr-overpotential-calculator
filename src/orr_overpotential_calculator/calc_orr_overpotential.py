@@ -64,7 +64,7 @@ ADSORBATES: Dict[str, List[Tuple[float, float]]] = {
 }
 
 # Structural parameters (in Angstroms)
-SLAB_VACUUM = 30.0
+SLAB_VACUUM = 15.0
 GAS_BOX = 15.0
 ADSORBATE_HEIGHT = 2.0
 

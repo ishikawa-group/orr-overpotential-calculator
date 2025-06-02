@@ -272,7 +272,7 @@ def set_initial_magmoms(atoms, kind: str = "bulk", formula: str = None):
         atoms: Atoms object with magnetic moments set
     """
     # Define constants within function
-    MAGNETIC_ELEMENTS = ["Mn", "Fe", "Cr"]  # Initial magnetic moment 1.0 μB
+    MAGNETIC_ELEMENTS = ["Mn", "Fe", "Cr", "Ni"]  # Initial magnetic moment 1.0 μB
     CLOSED_SHELL_MOLECULES = ["H2", "H2O"]  # Molecules calculated with spin unpolarized
     
     symbols = atoms.get_chemical_symbols()
