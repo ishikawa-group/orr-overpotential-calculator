@@ -25,7 +25,6 @@ from .tool import (
     parallel_displacement,
     fix_lower_surface, 
     set_initial_magmoms,
-    auto_lmaxmix,
     my_calculator,
     convert_numpy_types,
     place_adsorbate
@@ -142,7 +141,6 @@ def optimize_bulk_structure(
         calc_directory=work_directory
     )
     
-    auto_lmaxmix(optimized_bulk)
     energy = optimized_bulk.get_potential_energy()
     return optimized_bulk, energy
 
@@ -178,7 +176,6 @@ def optimize_slab_structure(
         calc_directory=work_directory
     )
     
-    auto_lmaxmix(optimized_slab)
     energy = optimized_slab.get_potential_energy()
     return optimized_slab, energy
 
@@ -216,7 +213,6 @@ def optimize_nanoparticle_structure(
         calc_directory=work_directory
     )
     
-    auto_lmaxmix(optimized_nanoparticle)
     energy = optimized_nanoparticle.get_potential_energy()
     return optimized_nanoparticle, energy
 
@@ -252,7 +248,6 @@ def optimize_nanoparticle_with_gas(
         calc_directory=work_directory
     )
     
-    auto_lmaxmix(optimized_nanoparticle_gas)
     energy = optimized_nanoparticle_gas.get_potential_energy()
     return optimized_nanoparticle_gas, energy
 

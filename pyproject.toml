@@ -6,15 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "orr_overpotential_calculator"
 version = "0.1.0"
 description = "Calculator for ORR overpotential"
-requires-python = ">=3.6"
+requires-python = ">=3.9"
 dependencies = [
     "matplotlib",
     "pandas",
-    "mace-torch",
-    "cuequivariance",
-    "cuequivariance-torch",
-    "cuequivariance-ops-torch-cu12"
-    "mattersim",
+    "mace-torch==0.3.13",
+    "torch-dftd",
     "ase",
 ]
 

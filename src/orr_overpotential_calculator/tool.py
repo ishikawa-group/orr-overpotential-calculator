@@ -246,7 +246,50 @@ def my_calculator(
         
         # Perform structure optimization
         optimizer = FIRE(atoms)
-        optimizer.run(fmax=0.05, steps=300)
+        optimizer.run(fmax=0.02, steps=300)
+
+        if isinstance(atoms, ExpCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calc_type == "mace":
+        from mace.calculators import mace_mp
+        from ase.filters import ExpCellFilter
+        from ase.optimize import FIRE
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model_path = ("https://github.com/ACEsuit/mace-foundations/releases/download/""mace_matpes_0/MACE-matpes-pbe-omat-ft.model")
+
+        mace_calculator = mace_mp(model=model_path, 
+                                  dispersion=True, 
+                                  dispersion_xc="pbe", 
+                                  default_dtype="float64", 
+                                  device=device)
+
+        # 設定変更を防ぐプロキシクラスを実装
+        class ProtectedMaceCalculator:
+            def __init__(self, calculator):
+                self._calculator = calculator
+                
+            def __getattr__(self, name):
+                if name == 'set':
+                    def protected_set(*args, **kwargs):
+                        #print("警告: MACEカリキュレータの設定変更は許可されていません")
+                        return self  # 何も変更せずに自身を返す
+                    return protected_set
+                return getattr(self._calculator, name)
+        
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedMaceCalculator(mace_calculator)
+        
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = ExpCellFilter(atoms)
+        
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=0.02, steps=300)
 
         if isinstance(atoms, ExpCellFilter):
             atoms = atoms.atoms
