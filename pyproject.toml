@@ -10,6 +10,10 @@ requires-python = ">=3.6"
 dependencies = [
     "matplotlib",
     "pandas",
+    "mace-torch",
+    "cuequivariance",
+    "cuequivariance-torch",
+    "cuequivariance-ops-torch-cu12"
     "mattersim",
     "ase",
 ]
