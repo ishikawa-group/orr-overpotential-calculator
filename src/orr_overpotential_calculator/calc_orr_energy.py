@@ -35,7 +35,7 @@ from .tool import (
 # ----------------------------------------------------------------------      
 
 # Base directory for calculation results
-BASE_DIR = "result/matter_sim"
+BASE_DIR = "result"
 
 # VASP configuration file path
 YAML_PATH = os.path.join(Path(__file__).parent, "data", "vasp.yaml")
@@ -70,7 +70,7 @@ def optimize_gas_molecule(
     molecule_name: str,
     gas_box_size: float,
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Tuple[Atoms, float]:
     """
@@ -80,7 +80,7 @@ def optimize_gas_molecule(
         molecule_name: Name of molecule from MOLECULES dictionary
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -115,7 +115,7 @@ def optimize_gas_molecule(
 def optimize_bulk_structure(
     bulk_atoms: Atoms,
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Tuple[Atoms, float]:
     """
@@ -124,7 +124,7 @@ def optimize_bulk_structure(
     Args:
         bulk_atoms: Initial bulk structure
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -148,7 +148,7 @@ def optimize_bulk_structure(
 def optimize_slab_structure(
     optimized_bulk: Atoms,
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Tuple[Atoms, float]:
     """
@@ -157,7 +157,7 @@ def optimize_slab_structure(
     Args:
         optimized_bulk: Optimized bulk structure
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -184,7 +184,7 @@ def optimize_nanoparticle_structure(
     nanoparticle: Atoms,
     gas_box_size: float,
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Tuple[Atoms, float]:
     """
@@ -194,7 +194,7 @@ def optimize_nanoparticle_structure(
         nanoparticle: Initial nanoparticle structure
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -220,7 +220,7 @@ def optimize_nanoparticle_structure(
 def optimize_nanoparticle_with_gas(
     nanoparticle_gas: Atoms,
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Tuple[Atoms, float]:
     """
@@ -229,7 +229,7 @@ def optimize_nanoparticle_with_gas(
     Args:
         nanoparticle_gas: Nanoparticle with gas molecules
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -261,7 +261,7 @@ def calculate_adsorption_on_site(
     optimized_molecule: Atoms,
     site: str,
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Tuple[float, float]:
     """
@@ -272,7 +272,7 @@ def calculate_adsorption_on_site(
         optimized_molecule: Optimized gas molecule structure
         site: Adsorption site type ("ontop", "bridge", "fcc")
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -331,7 +331,7 @@ def calculate_adsorption_with_offset(
     optimized_molecule: Atoms,
     offset: Tuple[float, float],
     work_directory: str,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH,
 ) -> Tuple[float, float]:
     """
@@ -342,7 +342,7 @@ def calculate_adsorption_with_offset(
         optimized_molecule: Optimized gas molecule structure
         offset: Fractional coordinate offset (x, y)
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -403,7 +403,7 @@ def calculate_adsorption_with_indices(
     work_directory: str,
     height: float = None,
     orientation: list = None,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH,
 ) -> Tuple[float, float]:
     """
@@ -416,7 +416,7 @@ def calculate_adsorption_with_indices(
         work_directory: Directory for calculation files
         height: Adsorption height in Å (None uses default 2.0 Å)
         orientation: Molecule orientation vector (None for automatic)
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -477,7 +477,7 @@ def calculate_adsorption_with_indices(
 def calculate_all_molecules(
     optimized_slab: Atoms,
     slab_energy: float,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     yaml_path: str = YAML_PATH
 ) -> Dict[str, Any]:
     """
@@ -486,7 +486,7 @@ def calculate_all_molecules(
     Args:
         optimized_slab: Optimized slab structure
         slab_energy: Energy of the clean slab (eV)
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:

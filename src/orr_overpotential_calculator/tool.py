@@ -176,7 +176,7 @@ def auto_lmaxmix(atoms):
 def my_calculator(
     atoms, 
     kind: str, 
-    calc_type: str = "mattersim", 
+    calc_type: str = "mace", 
     yaml_path: str = "data/vasp.yaml",
     calc_directory: str = "calc"
 ): 
@@ -186,7 +186,7 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calc_type: "vasp" / "mattersim" - calculator type
+        calc_type: "vasp" / "mattersim" / "mace"- calculator type
         yaml_path: Path to YAML configuration file
         calc_directory: Calculation directory for VASP
 
@@ -275,7 +275,6 @@ def my_calculator(
             def __getattr__(self, name):
                 if name == 'set':
                     def protected_set(*args, **kwargs):
-                        #print("警告: MACEカリキュレータの設定変更は許可されていません")
                         return self  # 何も変更せずに自身を返す
                     return protected_set
                 return getattr(self._calculator, name)

@@ -80,7 +80,7 @@ def calculate_required_molecules(
     slab_energy: float,
     base_directory: Path,
     force: bool = False,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     yaml_path: str = None,
 ) -> Dict[str, Any]:
@@ -92,7 +92,7 @@ def calculate_required_molecules(
         slab_energy: Energy of the optimized slab
         base_directory: Base directory for calculations
         force: Force recalculation of existing results
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
         yaml_path: Path to VASP configuration file
         
@@ -189,7 +189,7 @@ def calculate_required_molecules_with_indices(
     slab_energy: float,
     base_directory: Path,
     force: bool = False,
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     indices_dict: Dict[str, List] = None,
     yaml_path: str = None,
     height: float = None,
@@ -589,7 +589,7 @@ def calc_orr_overpotential(
     base_dir: str = "result/matter_sim",
     force: bool = False,
     log_level: str = "INFO",
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     yaml_path: str = None,
     nanoparticle: bool = False,
@@ -602,7 +602,7 @@ def calc_orr_overpotential(
         base_dir: Base directory for calculations
         force: Force recalculation of existing results
         log_level: Logging level
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorption sites
         yaml_path: Path to VASP configuration file
         nanoparticle: Whether to use nanoparticle workflow (deprecated)
@@ -677,7 +677,7 @@ def calc_nanoparticle_orr_overpotential(
     base_dir: str = "result/matter_sim",
     force: bool = False,
     log_level: str = "INFO",
-    calc_type: str = "mattersim",
+    calc_type: str = "mace",
     adsorbates: Dict[str, List[Tuple]] = None,
     yaml_path: str = None,
     vacuum_size: float = 20.0,
@@ -690,7 +690,7 @@ def calc_nanoparticle_orr_overpotential(
         base_dir: Base directory for calculations
         force: Force recalculation of existing results
         log_level: Logging level
-        calc_type: Calculator type ("vasp", "mattersim")
+        calc_type: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of atomic indices for adsorption sites
         yaml_path: Path to configuration file
         vacuum_size: Vacuum size around nanoparticle (Å)

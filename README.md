@@ -107,7 +107,7 @@ print(f"ORR overpotential: {eta:.3f} V")
 print(f"Limiting potential: {limiting_potential:.3f} V")
 ```
 
-### Using MatterSim Calculator
+### Using MACE Calculator
 
 ```python
 from ase.build import fcc111
@@ -116,15 +116,15 @@ from orr_overpotential_calculator import calc_orr_overpotential
 # Create structure
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
-# Use MatterSim neural network potential
+# Use neural network potential
 result = calc_orr_overpotential(
     bulk=bulk,
-    calc_type="mattersim",
-    base_dir="results_mattersim"
+    calc_type="mace",
+    base_dir="results_mace"
 )
 
 eta = result["eta"]
-print(f"ORR overpotential (MatterSim): {eta:.3f} V")
+print(f"ORR overpotential (mace): {eta:.3f} V")
 ```
 
 ### Custom Adsorption Sites
@@ -162,7 +162,7 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 | `base_dir` | `str` | `"result/matter_sim"` | Directory for saving calculation results |
 | `force` | `bool` | `False` | Whether to overwrite existing calculations |
 | `log_level` | `str` | `"INFO"` | Logging level ("DEBUG", "INFO", "WARNING", "ERROR") |
-| `calc_type` | `str` | `"mattersim"` | Calculator type ("vasp", "mattersim") |
+| `calc_type` | `str` | `"mace"` | Calculator type ("vasp", "mace") |
 | `adsorbates` | `Dict` | `None` | Custom adsorption site definitions (optional) |
 | `yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
 
@@ -180,13 +180,13 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 ### Optional Calculator Dependencies
 
 - **VASP**: Vienna Ab initio Simulation Package (for `calc_type="vasp"`)
-- **mattersim**: Neural Network Potential for Materials Simulation (for `calc_type="mattersim"`)
+- **mace**: Neural Network Potential for Materials Simulation (for `calc_type="mace"`)
 
 ### Installation of Calculator Dependencies
 
 ```bash
-# For MatterSim
-pip install mattersim
+# For mace
+pip install mace
 ```
 
 ## Output Files
