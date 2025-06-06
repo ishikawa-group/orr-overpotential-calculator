@@ -253,9 +253,9 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calc_type == "mattersim-matpes-d3":
+    elif calc_type == "mattersim-matpes-pbe-d3":
         # Import the custom function
-        from matttersim_matpes import mattersim_matpes_d3_calculator
+        from mattersim_matpes import mattersim_matpes_d3_calculator
         from ase.filters import ExpCellFilter
         from ase.optimize import FIRE
         
@@ -297,6 +297,51 @@ def my_calculator(
             atoms = atoms.atoms
         else:
             atoms = atoms
+
+
+    elif calc_type == "mattersim-matpes-pbe":
+        # Import the custom function
+        from mattersim_matpes import mattersim_matpes_d3_calculator
+        from ase.filters import ExpCellFilter
+        from ase.optimize import FIRE
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # Use custom calculator with D3 dispersion corrections
+        calculator = mattersim_matpes_d3_calculator(
+            device=device,
+            dispersion=False,  # Enable D3 dispersion corrections
+        )
+        
+        # 設定変更を防ぐプロキシクラスを実装
+        class ProtectedCalculator:
+            def __init__(self, calculator):
+                self._calculator = calculator
+                
+            def __getattr__(self, name):
+                if name == 'set':
+                    def protected_set(*args, **kwargs):
+                        print("Warning: Calculator settings are protected and cannot be modified")
+                        return self  # 何も変更せずに自身を返す
+                    return protected_set
+                return getattr(self._calculator, name)
+        
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedCalculator(calculator)
+        
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = ExpCellFilter(atoms)
+        
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=0.02, steps=300)
+
+        if isinstance(atoms, ExpCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
 
     elif calc_type == "mace":
         from mace.calculators import mace_mp
