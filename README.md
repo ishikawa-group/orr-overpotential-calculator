@@ -212,4 +212,4 @@ The package generates several output files in the specified `base_dir`:
 
 ## License
 
-ABC...
+MIT lincense
