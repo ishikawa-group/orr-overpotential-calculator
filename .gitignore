@@ -79,26 +79,26 @@ example/nanoparticle/**/*
 !example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.txt
 !example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.yaml
 
-!example/modefied_surface/
-example/modefied_surface/**/*
-!example/modefied_surface/**/*.py
-!example/modefied_surface/**/*.md
-!example/modefied_surface/**/*.json
-!example/modefied_surface/**/*.png
-!example/modefied_surface/**/*.txt
-!example/modefied_surface/**/*.yaml
+!example/modified_surface/
+example/modified_surface/**/*
+!example/modified_surface/**/*.py
+!example/modified_surface/**/*.md
+!example/modified_surface/**/*.json
+!example/modified_surface/**/*.png
+!example/modified_surface/**/*.txt
+!example/modified_surface/**/*.yaml
 
-!example/modefied_surface/result
-!example/modefied_surface/result/**/*.py
-!example/modefied_surface/result/**/*.json
-!example/modefied_surface/result/**/*.png
-!example/modefied_surface/result/**/*.txt
-!example/modefied_surface/result/**/*.yaml
-!example/modefied_surface/result/**/*.csv
+!example/modified_surface/result
+!example/modified_surface/result/**/*.py
+!example/modified_surface/result/**/*.json
+!example/modified_surface/result/**/*.png
+!example/modified_surface/result/**/*.txt
+!example/modified_surface/result/**/*.yaml
+!example/modified_surface/result/**/*.csv
 
-!example/modefied_surface/code
-!example/modefied_surface/code/**/*.py
-!example/modefied_surface/code/**/*.json
-!example/modefied_surface/code/**/*.png
-!example/modefied_surface/code/**/*.txt
-!example/modefied_surface/code/**/*.yaml
+!example/modified_surface/code
+!example/modified_surface/code/**/*.py
+!example/modified_surface/code/**/*.json
+!example/modified_surface/code/**/*.png
+!example/modified_surface/code/**/*.txt
+!example/modified_surface/code/**/*.yaml
