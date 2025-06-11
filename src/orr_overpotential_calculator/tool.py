@@ -349,7 +349,7 @@ def my_calculator(
         from ase.optimize import FIRE
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model_path = ("https://github.com/ACEsuit/mace-foundations/releases/download/""mace_matpes_0/MACE-matpes-pbe-omat-ft.model")
+        model_path = ("https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model")
 
         mace_calculator = mace_mp(model=model_path, 
                                   dispersion=True, 
