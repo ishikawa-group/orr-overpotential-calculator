@@ -34,47 +34,47 @@ example/*
 !example/surface/
 
 
-!example/nanoparticle/
-example/nanoparticle/**/*
-!example/nanoparticle/**/*.py
-!example/nanoparticle/**/*.md
-!example/nanoparticle/**/*.json
-!example/nanoparticle/**/*.png
-!example/nanoparticle/**/*.txt
-!example/nanoparticle/**/*.yaml
+!example/cluster/
+example/cluster/**/*
+!example/cluster/**/*.py
+!example/cluster/**/*.md
+!example/cluster/**/*.json
+!example/cluster/**/*.png
+!example/cluster/**/*.txt
+!example/cluster/**/*.yaml
 
-!example/nanoparticle/result
-!example/nanoparticle/result/**/*.py
-!example/nanoparticle/result/**/*.json
-!example/nanoparticle/result/**/*.png
-!example/nanoparticle/result/**/*.txt
-!example/nanoparticle/result/**/*.yaml
-!example/nanoparticle/result/**/*.csv
+!example/cluster/result
+!example/cluster/result/**/*.py
+!example/cluster/result/**/*.json
+!example/cluster/result/**/*.png
+!example/cluster/result/**/*.txt
+!example/cluster/result/**/*.yaml
+!example/cluster/result/**/*.csv
 
-!example/nanoparticle/code
-!example/nanoparticle/code/**/*.py
-!example/nanoparticle/code/**/*.json
-!example/nanoparticle/code/**/*.png
-!example/nanoparticle/code/**/*.txt
-!example/nanoparticle/code/**/*.yaml
+!example/cluster/code
+!example/cluster/code/**/*.py
+!example/cluster/code/**/*.json
+!example/cluster/code/**/*.png
+!example/cluster/code/**/*.txt
+!example/cluster/code/**/*.yaml
 
-!example/nanoparticle/Pt_nanoparticle_mattersim
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.py
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.json
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.png
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.txt
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.yaml
+!example/cluster/Pt_cluster_mattersim
+!example/cluster/Pt_cluster_mattersim/**/*.py
+!example/cluster/Pt_cluster_mattersim/**/*.json
+!example/cluster/Pt_cluster_mattersim/**/*.png
+!example/cluster/Pt_cluster_mattersim/**/*.txt
+!example/cluster/Pt_cluster_mattersim/**/*.yaml
 
-!example/nanoparticle/Pt_nanoparticle_vasp
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.py
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.json
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.png
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.txt
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.yaml
+!example/cluster/Pt_cluster_vasp
+!example/cluster/Pt_cluster_vasp/**/*.py
+!example/cluster/Pt_cluster_vasp/**/*.json
+!example/cluster/Pt_cluster_vasp/**/*.png
+!example/cluster/Pt_cluster_vasp/**/*.txt
+!example/cluster/Pt_cluster_vasp/**/*.yaml
 
-!example/nanoparticle/Pt_nanoparticle_vasp/*/
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.py
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.json
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.png
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.txt
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.yaml
+!example/cluster/Pt_cluster_vasp/*/
+!example/cluster/Pt_cluster_vasp/*/**/*.py
+!example/cluster/Pt_cluster_vasp/*/**/*.json
+!example/cluster/Pt_cluster_vasp/*/**/*.png
+!example/cluster/Pt_cluster_vasp/*/**/*.txt
+!example/cluster/Pt_cluster_vasp/*/**/*.yaml
