@@ -3,7 +3,7 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "orr_overpotential_calculator"
+name = "orr-overpotential-calculator"
 version = "0.1.0"
 description = "Calculator for ORR overpotential"
 requires-python = ">=3.9"
@@ -11,9 +11,10 @@ dependencies = [
     "matplotlib",
     "pandas",
     "mace-torch==0.3.13",
-    # "mattersim", 
+    # "mattersim",
     "torch-dftd",
     "ase",
+    "pyqt5",
 ]
 
 [tool.setuptools]
@@ -23,4 +24,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"orr_overpotential_calculator.data" = ["*.yaml"]
+"orr_overpotential_calculator" = ["data/*.yaml"]

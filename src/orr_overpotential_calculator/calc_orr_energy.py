@@ -21,14 +21,14 @@ from ase.filters import FrechetCellFilter, ExpCellFilter
 from ase.io import write
 
 # Add custom module path
-from .tool import (
+from orr_overpotential_calculator.tool import (
     parallel_displacement,
-    fix_lower_surface, 
+    fix_lower_surface,
     set_initial_magmoms,
     my_calculator,
     convert_numpy_types,
     place_adsorbate
-)
+    )
 
 # ----------------------------------------------------------------------
 # Configuration Constants
@@ -52,7 +52,7 @@ MOLECULES = {
     "O2":  Atoms("OO",  positions=[(0, 0, 0), (0, 0, 1.21)]),
     "H":   Atoms("H",   positions=[(0, 0, 0)]),
     "O":   Atoms("O",   positions=[(0, 0, 0)])
-}
+    }
 
 # Closed-shell molecules list for spin calculations
 CLOSED_SHELL_MOLECULES = ["H2", "H2O"]
@@ -66,13 +66,14 @@ ADSORBATE_HEIGHT = 2.0  # Initial height of adsorbate above surface
 # Optimization Functions
 # ----------------------------------------------------------------------
 
+
 def optimize_gas_molecule(
     molecule_name: str,
     gas_box_size: float,
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Tuple[Atoms, float]:
+    ) -> Tuple[Atoms, float]:
     """
     Optimize gas phase molecule structure and calculate energy.
     
@@ -117,7 +118,7 @@ def optimize_bulk_structure(
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Tuple[Atoms, float]:
+    ) -> Tuple[Atoms, float]:
     """
     Optimize bulk crystal structure and calculate energy.
     
@@ -150,7 +151,7 @@ def optimize_slab_structure(
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Tuple[Atoms, float]:
+    ) -> Tuple[Atoms, float]:
     """
     Create and optimize slab structure from bulk and calculate energy.
     
@@ -180,18 +181,18 @@ def optimize_slab_structure(
     return optimized_slab, energy
 
 
-def optimize_nanoparticle_structure(
-    nanoparticle: Atoms,
+def optimize_cluster_structure(
+    cluster: Atoms,
     gas_box_size: float,
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Tuple[Atoms, float]:
+    ) -> Tuple[Atoms, float]:
     """
-    Optimize nanoparticle structure and calculate energy.
+    Optimize cluster structure and calculate energy.
     
     Args:
-        nanoparticle: Initial nanoparticle structure
+        cluster: Initial cluster structure
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
         calc_type: Calculator type ("vasp", "mace")
@@ -200,34 +201,34 @@ def optimize_nanoparticle_structure(
     Returns:
         Tuple of optimized Atoms object and energy (eV)
     """
-    nanoparticle_atoms = nanoparticle.copy()
-    nanoparticle_atoms.set_cell([gas_box_size, gas_box_size, gas_box_size])
-    nanoparticle_atoms.set_pbc(True)
-    nanoparticle_atoms.center()
-    nanoparticle_atoms = set_initial_magmoms(nanoparticle_atoms, kind="nanoparticle")
+    cluster_atoms = cluster.copy()
+    cluster_atoms.set_cell([gas_box_size, gas_box_size, gas_box_size])
+    cluster_atoms.set_pbc(True)
+    cluster_atoms.center()
+    cluster_atoms = set_initial_magmoms(cluster_atoms, kind="cluster")
     
-    optimized_nanoparticle = my_calculator(
-        nanoparticle_atoms, "nanoparticle",
+    optimized_cluster = my_calculator(
+        cluster_atoms, "cluster",
         calc_type=calc_type,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
     
-    energy = optimized_nanoparticle.get_potential_energy()
-    return optimized_nanoparticle, energy
+    energy = optimized_cluster.get_potential_energy()
+    return optimized_cluster, energy
 
 
-def optimize_nanoparticle_with_gas(
-    nanoparticle_gas: Atoms,
+def optimize_cluster_with_gas(
+    cluster_gas: Atoms,
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Tuple[Atoms, float]:
+    ) -> Tuple[Atoms, float]:
     """
-    Optimize nanoparticle with adsorbed gas molecules and calculate energy.
+    Optimize cluster with adsorbed gas molecules and calculate energy.
     
     Args:
-        nanoparticle_gas: Nanoparticle with gas molecules
+        cluster_gas: cluster with gas molecules
         work_directory: Directory for calculation files
         calc_type: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
@@ -235,21 +236,21 @@ def optimize_nanoparticle_with_gas(
     Returns:
         Tuple of optimized Atoms object and energy (eV)
     """
-    nanoparticle_gas_atoms = nanoparticle_gas.copy()
-    nanoparticle_gas_atoms.set_pbc(True)
-    nanoparticle_gas_atoms = set_initial_magmoms(
-        nanoparticle_gas_atoms, kind="nanoparticle_gas"
+    cluster_gas_atoms = cluster_gas.copy()
+    cluster_gas_atoms.set_pbc(True)
+    cluster_gas_atoms = set_initial_magmoms(
+        cluster_gas_atoms, kind="cluster_gas"
     )
     
-    optimized_nanoparticle_gas = my_calculator(
-        nanoparticle_gas_atoms, "nanoparticle_gas",
+    optimized_cluster_gas = my_calculator(
+        cluster_gas_atoms, "cluster_gas",
         calc_type=calc_type,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
     
-    energy = optimized_nanoparticle_gas.get_potential_energy()
-    return optimized_nanoparticle_gas, energy
+    energy = optimized_cluster_gas.get_potential_energy()
+    return optimized_cluster_gas, energy
 
 
 # ----------------------------------------------------------------------
@@ -263,7 +264,7 @@ def calculate_adsorption_on_site(
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Tuple[float, float]:
+    ) -> Tuple[float, float]:
     """
     Calculate adsorption energy at specified site.
     
@@ -333,7 +334,7 @@ def calculate_adsorption_with_offset(
     work_directory: str,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH,
-) -> Tuple[float, float]:
+    ) -> Tuple[float, float]:
     """
     Calculate adsorption energy with specified offset position.
     
@@ -405,12 +406,12 @@ def calculate_adsorption_with_indices(
     orientation: list = None,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH,
-) -> Tuple[float, float]:
+    ) -> Tuple[float, float]:
     """
     Calculate adsorption energy at site defined by atom indices.
     
     Args:
-        optimized_structure: Optimized structure (slab, nanoparticle, etc.)
+        optimized_structure: Optimized structure (slab, cluster, etc.)
         optimized_molecule: Optimized gas molecule structure
         atom_indices: List of atom indices defining adsorption site (1-4 atoms)
         work_directory: Directory for calculation files
@@ -427,7 +428,7 @@ def calculate_adsorption_with_indices(
 
     # Prepare structure
     structure = optimized_structure.copy()
-    structure = set_initial_magmoms(structure, kind="nanoparticle_gas")
+    structure = set_initial_magmoms(structure, kind="cluster_gas")
     structure.set_pbc(True)
 
     # Prepare adsorbate molecule
@@ -453,7 +454,7 @@ def calculate_adsorption_with_indices(
     # Set up calculator and calculate energy
     calculator = my_calculator(
         structure_with_adsorbate,
-        kind='nanoparticle_gas',
+        kind="cluster_gas",
         calc_type=calc_type,
         yaml_path=yaml_path,
         calc_directory=work_directory
@@ -479,7 +480,7 @@ def calculate_all_molecules(
     slab_energy: float,
     calc_type: str = "mace",
     yaml_path: str = YAML_PATH
-) -> Dict[str, Any]:
+    ) -> Dict[str, Any]:
     """
     Calculate adsorption energies for all molecules in MOLECULES dictionary.
     
@@ -572,4 +573,5 @@ def calculate_all_molecules(
         json.dump(results_for_json, f, indent=2)
 
     print(f"\nAll calculations completed. Results saved to {summary_file}")
+
     return all_results
