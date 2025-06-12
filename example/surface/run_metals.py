@@ -17,11 +17,11 @@ force = True
 log_level = "INFO"
 calc_type = "mace"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
-results_dir = Path(__file__).parent / "results"
+result_dir = Path(__file__).parent / "result"
 # ---
 
 for metal in metals:
-    outdir = results_dir / (metal + "111")
+    outdir = result_dir / (metal + "111")
     outdir.mkdir(parents=True, exist_ok=True)
 
     bulk = fcc111(metal, size=(3, 3, 4), a=lattice_constants[metal], vacuum=None, periodic=True)

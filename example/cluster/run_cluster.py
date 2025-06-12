@@ -13,14 +13,14 @@ from orr_overpotential_calculator import calc_cluster_orr_overpotential
 
 # ----------------
 # 引数の設定
-outdir = str(Path(__file__).parent / "Pt_cluster")
+outdir = str(Path(__file__).parent / "result" / "Pt")
 force = True
 log_level = "INFO"
 calc_type = "mace"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 # ----------------
 
-cluster = Octahedron(symbol="Pt", length=5, cutoff=0)
+cluster = Octahedron(symbol="Pt", length=3, cutoff=0)
 
 orr_adsorbates: Dict[str, List[Tuple]] = {
     "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],  # カンマを追加してタプル化
