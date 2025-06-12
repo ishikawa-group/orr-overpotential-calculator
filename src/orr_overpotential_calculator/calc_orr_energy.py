@@ -8,8 +8,10 @@ import os
 import sys
 import json
 import time
+import logging
+
 import numpy as np
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List, Optional
 from pathlib import Path
 
 from ase import Atom, Atoms
@@ -575,3 +577,408 @@ def calculate_all_molecules(
     print(f"\nAll calculations completed. Results saved to {summary_file}")
 
     return all_results
+
+
+def search_adsorption_site(
+    bulk: Atoms,
+    base_dir: str = "result/adsorption_site",
+    force: bool = False,
+    log_level: str = "INFO",
+    calc_type: str = "mace",
+    adsorbates: Dict[str, Atoms] = None,
+    offset: Dict[str, List[Tuple[float, float]]] = None,
+    yaml_path: str = None,
+) -> Dict[str, Any]:
+    """
+    Calculate adsorption energies of molecules at various adsorption sites (offset positions)
+    and identify the most stable adsorption site.
+
+    Args:
+        bulk: Bulk crystal structure
+        base_dir: Directory to save calculation results
+        force: Whether to overwrite existing calculation results
+        log_level: Logging level
+        calc_type: Calculation type ("vasp", "mace", etc.)
+        adsorbates: Dictionary of adsorbate molecules {name: Atoms}
+        offset: Offset coordinates for adsorption sites {molecule_name: [(x1,y1), (x2,y2), ...]}
+        yaml_path: Path to VASP configuration file
+
+    Returns:
+        Dictionary containing the most stable adsorption site information
+    """
+    # 1. Logging setup
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(levelname)s: %(message)s",
+        stream=sys.stdout,
+    )
+
+    # Parameter validation
+    if adsorbates is None or len(adsorbates) == 0:
+        raise ValueError("Please specify at least one adsorbate molecule")
+
+    # Set default offset values if not specified
+    if offset is None:
+        offset = {
+            name: [(0.0, 0.0), (0.5, 0.0)]  # ontop, bridge
+            for name in adsorbates.keys()
+        }
+
+    # 2. Directory setup
+    base_path = Path(base_dir).resolve()
+    base_path.mkdir(parents=True, exist_ok=True)
+
+    bulk_dir = base_path / "bulk"
+    slab_dir = base_path / "slab"
+    bulk_dir.mkdir(parents=True, exist_ok=True)
+    slab_dir.mkdir(parents=True, exist_ok=True)
+
+    # 3. Bulk optimization
+    logger = logging.getLogger("adsorption_site_search")
+    logger.info("Optimizing bulk structure...")
+    optimized_bulk, bulk_energy = optimize_bulk_structure(
+        bulk, str(bulk_dir), calc_type, yaml_path
+    )
+    write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
+
+    # 4. Slab optimization
+    logger.info("Optimizing slab structure...")
+    optimized_slab, slab_energy = optimize_slab_structure(
+        optimized_bulk, str(slab_dir), calc_type, yaml_path
+    )
+    write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
+
+    # 5. Dictionary to store overall results
+    all_results: Dict[str, Any] = {
+        "bulk_energy": float(bulk_energy),
+        "slab_energy": float(slab_energy),
+        "molecules": {}
+    }
+
+    # Track the most stable site across all molecules
+    most_stable_site = None
+    most_stable_energy = float('inf')
+    most_stable_molecule = None
+
+    # 6. Calculate for each adsorbate
+    for molecule_name, molecule in adsorbates.items():
+        logger.info(f"=== Starting adsorption calculation for molecule {molecule_name} ===")
+
+        molecule_dir = base_path / molecule_name
+        gas_dir = molecule_dir / f"{molecule_name}_gas"
+        adsorption_dir = molecule_dir / "adsorption"
+
+        gas_dir.mkdir(parents=True, exist_ok=True)
+        adsorption_dir.mkdir(parents=True, exist_ok=True)
+
+        # 6.1. Gas phase molecule optimization
+        gas_json = gas_dir / "opt_gas_result.json"
+        xyz_gas = gas_dir / "opt_gas.xyz"
+
+        if gas_json.exists() and not force:
+            # Load from existing results
+            data = json.load(gas_json.open())
+            gas_energy = data["E_opt"]
+            optimized_molecule = Atoms.read(xyz_gas)
+            logger.info(f"Gas phase molecule energy (existing): {gas_energy:.6f} eV")
+        else:
+            # 新規計算部分を修正
+            # カスタム分子用の一時的な名前を作成
+            temp_name = f"custom_{molecule_name}"
+
+            global MOLECULES
+
+            # 一時的に分子辞書に追加
+            old_molecules = MOLECULES.copy()
+            MOLECULES[temp_name] = molecule.copy()
+
+            try:
+                # 正しい引数名で関数を呼び出す
+                optimized_molecule, gas_energy = optimize_gas_molecule(
+                    molecule_name=temp_name,  # 正しい引数名
+                    gas_box_size=GAS_BOX,
+                    work_directory=str(gas_dir),
+                    calc_type=calc_type,
+                    yaml_path=yaml_path
+                )
+                optimized_molecule.write(xyz_gas)
+                json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
+                logger.info(f"Gas phase molecule energy (calculated): {gas_energy:.6f} eV")
+            finally:
+                # 一時的な分子を削除して辞書を元に戻す
+                MOLECULES = old_molecules
+
+            optimized_molecule.write(xyz_gas)
+            json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
+            logger.info(f"Gas phase molecule energy (calculated): {gas_energy:.6f} eV")
+
+        # Initialize molecule results dictionary
+        molecule_results = {
+            "E_gas": float(gas_energy),
+            "E_slab": float(slab_energy),
+            "offsets": {}
+        }
+
+        # 6.2. Calculate at each adsorption site
+        offsets_list = offset.get(molecule_name, [(0.0, 0.0), (0.5, 0.0)])
+        logger.info(f"Number of adsorption sites to calculate: {len(offsets_list)}")
+
+        for idx, offset_coord in enumerate(offsets_list):
+            key = f"ofst_{float(offset_coord[0]):.2f}_{float(offset_coord[1]):.2f}"
+            offset_json = adsorption_dir / f"{key}.json"
+            work_dir = adsorption_dir / key
+
+            logger.info(f"Adsorption site {idx+1}/{len(offsets_list)}: {key}")
+
+            if offset_json.exists() and (work_dir / ".done").exists() and not force:
+                # Load from existing results
+                data = json.load(offset_json.open())
+                total_energy = data["E_total"]
+                elapsed_time = data["elapsed"]
+                logger.info(f"  -> Loading existing calculation results")
+            else:
+                # New calculation
+                logger.info(f"  -> Running adsorption calculation...")
+                total_energy, elapsed_time = calculate_adsorption_with_offset(
+                    optimized_slab, optimized_molecule, offset_coord, str(work_dir),
+                    calc_type, yaml_path
+                )
+                json.dump({
+                    "E_total": total_energy,
+                    "elapsed": elapsed_time
+                }, offset_json.open("w"))
+                (work_dir / ".done").touch()
+                logger.info(f"  -> Calculation completed: {elapsed_time:.1f} seconds")
+
+            # Calculate adsorption energy
+            adsorption_energy = total_energy - (slab_energy + gas_energy)
+
+            # Record results
+            molecule_results["offsets"][key] = {
+                "E_total": float(total_energy),
+                "E_ads": float(adsorption_energy),
+                "elapsed": float(elapsed_time),
+                "coordinates": list(offset_coord)
+            }
+
+            logger.info(f"  -> Adsorption energy: {adsorption_energy:.6f} eV")
+
+            # Update most stable site
+            if adsorption_energy < most_stable_energy:
+                most_stable_energy = adsorption_energy
+                most_stable_site = key
+                most_stable_molecule = molecule_name
+
+        # Identify the most stable site within this molecule
+        if molecule_results["offsets"]:
+            best_key, best_data = min(
+                molecule_results["offsets"].items(),
+                key=lambda x: x[1]["E_ads"]
+            )
+
+            molecule_results["best_offset"] = best_key
+            molecule_results["best_coordinates"] = best_data["coordinates"]
+            molecule_results["E_ads_best"] = float(best_data["E_ads"])
+            molecule_results["E_total_best"] = float(best_data["E_total"])
+
+            logger.info(f"Most stable site for molecule {molecule_name}: {best_key}")
+            logger.info(f"Most stable adsorption energy: {best_data['E_ads']:.6f} eV")
+
+        # Add molecule results to overall dictionary
+        all_results["molecules"][molecule_name] = molecule_results
+
+    # 7. Add overall most stable site information
+    if most_stable_site and most_stable_molecule:
+        all_results["most_stable_adsorption_site"] = most_stable_site
+        all_results["most_stable_adsorption_molecule"] = most_stable_molecule
+        all_results["most_stable_adsorption_energy"] = float(most_stable_energy)
+        all_results["most_stable_coordinates"] = all_results["molecules"][most_stable_molecule]["offsets"][most_stable_site]["coordinates"]
+
+    # 8. Save results in JSON format
+    results_json_path = base_path / "adsorption_site_results.json"
+    with open(results_json_path, "w") as f:
+        json.dump(convert_numpy_types(all_results), f, indent=2)
+
+    logger.info(f"Calculation results saved: {results_json_path}")
+
+    # 9. Create a concise summary
+    summary = {
+        "molecules": {},
+        "most_stable_adsorption_site": all_results.get("most_stable_adsorption_site", "N/A"),
+        "most_stable_adsorption_molecule": all_results.get("most_stable_adsorption_molecule", "N/A"),
+        "most_stable_adsorption_energy": all_results.get("most_stable_adsorption_energy", float('inf'))
+    }
+
+    for mol_name, mol_data in all_results["molecules"].items():
+        if "best_offset" in mol_data:
+            summary["molecules"][mol_name] = {
+                "best_site": mol_data["best_offset"],
+                "best_coordinates": mol_data["best_coordinates"],
+                "best_adsorption_energy": mol_data["E_ads_best"]
+            }
+
+    summary_path = base_path / "adsorption_site_summary.json"
+    with open(summary_path, "w") as f:
+        json.dump(convert_numpy_types(summary), f, indent=2)
+
+    logger.info(f"Summary saved: {summary_path}")
+
+    return summary
+
+def attach_modifier_to_surface(
+    optimized_slab: Atoms,
+    slab_energy: float,
+    modifier_name: str,
+    modifier_molecule: Atoms,
+    offset: Tuple[float, float],
+    base_directory: Path,
+    calc_type: str = "mace",
+    yaml_path: str = None,
+    force: bool = False,  # ← 新しい引数を追加
+) -> Tuple[Atoms, float]:
+    """
+    Optimize modifier molecule and adsorb it onto the slab surface.
+
+    Args:
+        optimized_slab: Optimized slab structure
+        slab_energy: Energy of the slab
+        modifier_name: Name of the modifier molecule
+        modifier_molecule: Structure of the modifier molecule
+        offset: Adsorption position (fractional coordinates)
+        base_directory: Directory to save calculation results
+        calc_type: Calculation type
+        yaml_path: Path to VASP configuration file
+        force: Whether to overwrite existing calculations
+
+    Returns:
+        Slab structure with adsorbed modifier molecule and its energy
+    """
+    # Directory setup
+    modifier_dir = base_directory / "surface_modifier"
+    gas_dir = modifier_dir / f"{modifier_name}_gas"
+    adsorption_dir = modifier_dir / "adsorption"
+
+    # Create directories
+    modifier_dir.mkdir(parents=True, exist_ok=True)
+    gas_dir.mkdir(parents=True, exist_ok=True)
+    adsorption_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Optimize gas phase modifier molecule
+    logger = logging.getLogger("adsorption_site_search")
+    logger.info(f"Optimizing gas phase {modifier_name}...")
+
+    # Check for existing gas calculation
+    gas_json = gas_dir / "opt_result.json"
+    xyz_gas = gas_dir / "opt.xyz"
+
+    if gas_json.exists() and xyz_gas.exists() and not force:
+        # Load existing results
+        with open(gas_json, "r") as f:
+            data = json.load(f)
+        gas_energy = data["E_opt"]
+        optimized_molecule = Atoms()
+        optimized_molecule = optimized_molecule.read(str(xyz_gas))
+        logger.info(f"Gas phase {modifier_name} energy (existing): {gas_energy:.6f} eV")
+    else:
+        # New calculation
+        # Create temporary name for modifier molecule
+        temp_name = f"modifier_{modifier_name}"
+
+        # Declare global variable beforehand
+        global MOLECULES
+
+        # Temporarily add to molecule dictionary
+        old_molecules = MOLECULES.copy()
+        MOLECULES[temp_name] = modifier_molecule.copy()
+
+        try:
+            # Optimize gas phase molecule
+            optimized_molecule, gas_energy = optimize_gas_molecule(
+                molecule_name=temp_name,
+                gas_box_size=GAS_BOX,
+                work_directory=str(gas_dir),
+                calc_type=calc_type,
+                yaml_path=yaml_path
+            )
+            # Save results
+            optimized_molecule.write(str(xyz_gas))
+            with open(gas_json, "w") as f:
+                json.dump({"E_opt": float(gas_energy)}, f)
+
+            logger.info(f"Gas phase {modifier_name} energy: {gas_energy:.6f} eV")
+        finally:
+            # Restore global dictionary
+            MOLECULES = old_molecules
+
+    # 2. Adsorb modifier molecule onto slab
+    logger.info(f"Calculating adsorption of modifier molecule {modifier_name} at position {offset}...")
+
+    key = f"ofst_{offset[0]}_{offset[1]}"
+    work_dir = adsorption_dir / key
+    adsorption_json = adsorption_dir / f"{key}.json"
+    adsorption_xyz = adsorption_dir / f"{key}.xyz"
+
+    if adsorption_json.exists() and adsorption_xyz.exists() and not force:
+        # Load existing results
+        with open(adsorption_json, "r") as f:
+            data = json.load(f)
+        total_energy = data["E_total"]
+        slab_with_adsorbate = Atoms()
+        slab_with_adsorbate = slab_with_adsorbate.read(str(adsorption_xyz))
+        logger.info(f"Adsorption calculation (existing): {total_energy:.6f} eV")
+    else:
+        # New calculation
+        work_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create copy of slab
+        slab = optimized_slab.copy()
+        slab = set_initial_magmoms(slab, kind="slab")
+
+        # Prepare molecule
+        adsorbate = optimized_molecule.copy()
+        adsorbate = set_initial_magmoms(adsorbate, kind="gas",
+                                       formula=adsorbate.get_chemical_formula())
+        adsorbate.center()
+
+        # Create slab+adsorbate system
+        slab_with_adsorbate = slab.copy()
+        slab_with_adsorbate = fix_lower_surface(slab_with_adsorbate)
+
+        # Add molecule
+        add_adsorbate(slab_with_adsorbate, adsorbate,
+                      ADSORBATE_HEIGHT, position="ontop", offset=offset)
+
+        # 3. Structure optimization and calculation
+        calculator = my_calculator(
+            atoms=slab_with_adsorbate,
+            kind="slab",
+            calc_type=calc_type,
+            yaml_path=yaml_path,
+            calc_directory=str(work_dir)
+        )
+
+        # Energy calculation
+        start_time = time.time()
+        total_energy = calculator.get_potential_energy()
+        elapsed_time = time.time() - start_time
+
+        # Save results
+        # Save optimized structure in XYZ format
+        write(str(adsorption_xyz), calculator)
+
+        # Save energy information in JSON format
+        adsorption_energy = total_energy - (slab_energy + gas_energy)
+        with open(adsorption_json, "w") as f:
+            json.dump({
+                "E_total": float(total_energy),
+                "E_gas": float(gas_energy),
+                "E_slab": float(slab_energy),
+                "E_ads": float(adsorption_energy),
+                "elapsed": float(elapsed_time)
+            }, f)
+
+        logger.info(f"{modifier_name} adsorption energy: {adsorption_energy:.6f} eV")
+        logger.info(f"Calculation time: {elapsed_time:.2f} seconds")
+
+    # Return optimized structure and energy
+    return slab_with_adsorbate, total_energy
