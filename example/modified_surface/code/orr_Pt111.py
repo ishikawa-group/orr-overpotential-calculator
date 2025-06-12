@@ -19,7 +19,7 @@ calc_type = "vasp"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 #----------------
 
-bulk = fcc111("Pt", size=(4, 4, 4), a=3.9, vacuum=None, periodic=True)
+bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
 orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
     "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)], #ontop, bridge, fcc, hcp
