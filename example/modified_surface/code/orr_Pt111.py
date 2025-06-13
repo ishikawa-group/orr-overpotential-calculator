@@ -12,7 +12,7 @@ from orr_overpotential_calculator import calc_orr_overpotential
 
 #---------------------
 # 引数の設定
-base_dir = str(Path(__file__).parent.parent / "result/ORR/Pt111")
+outdir = str(Path(__file__).parent.parent / "result/ORR/Pt111")
 force = True
 log_level = "INFO"
 calc_type = "vasp"
@@ -30,7 +30,7 @@ orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
 # 関数呼び出しの変更：辞書として結果を受け取る
 result = calc_orr_overpotential(
     bulk=bulk,
-    base_dir=base_dir,
+    outdir=outdir,
     force=force,
     log_level=log_level,
     calc_type=calc_type,
