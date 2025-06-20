@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 ORR Overpotential Workflow (Offset-based Adsorption Version)
 ============================================================
@@ -10,7 +9,6 @@ ORR Overpotential Workflow (Offset-based Adsorption Version)
 The lowest energy configuration is adopted as the representative value for each
 adsorbate species to evaluate ΔE and η.
 """
-
 from __future__ import annotations
 import argparse
 import json
@@ -83,7 +81,7 @@ def calculate_required_molecules(
         optimized_slab: Atoms,
         slab_energy: float,
         outdir: Path,
-        force: bool = False,
+        overwrite: bool = False,
         calc_type: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         yaml_path: str = None,
@@ -95,7 +93,7 @@ def calculate_required_molecules(
         optimized_slab: Optimized slab structure
         slab_energy: Energy of the optimized slab
         outdir: Base directory for calculations
-        force: Force recalculation of existing results
+        overwrite: Force recalculation of existing results
         calc_type: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
         yaml_path: Path to VASP configuration file
@@ -143,7 +141,7 @@ def calculate_required_molecules(
             offset_json = adsorption_dir / f"{key}.json"
             work_dir = adsorption_dir / key
 
-            if offset_json.exists() and (work_dir / ".done").exists() and not force:
+            if offset_json.exists() and (work_dir / ".done").exists() and not overwrite:
                 # Load existing results
                 data = json.load(offset_json.open())
                 total_energy = data["E_total"]
@@ -191,7 +189,7 @@ def calculate_required_molecules_with_indices(
         optimized_slab: Atoms,
         slab_energy: float,
         outdir: Path,
-        force: bool = False,
+        overwrite: bool = False,
         calc_type: str = "mace",
         indices_dict: Dict[str, List] = None,
         yaml_path: str = None,
@@ -205,7 +203,7 @@ def calculate_required_molecules_with_indices(
         optimized_slab: Optimized slab structure
         slab_energy: Energy of the optimized slab
         outdir: Base directory for calculations
-        force: Force recalculation of existing results
+        overwrite: Force recalculation of existing results
         calc_type: Calculator type
         indices_dict: Dictionary of atomic indices for each molecule
         yaml_path: Path to configuration file
@@ -261,7 +259,7 @@ def calculate_required_molecules_with_indices(
             indices_json = adsorption_dir / f"{key}.json"
             work_dir = adsorption_dir / key
 
-            if indices_json.exists() and (work_dir / ".done").exists() and not force:
+            if indices_json.exists() and (work_dir / ".done").exists() and not overwrite:
                 # Load existing results
                 data = json.load(indices_json.open())
                 total_energy = data["E_total"]
@@ -583,7 +581,7 @@ def get_overpotential_orr(
 def calc_orr_overpotential(
         bulk: Atoms,
         outdir: str = "result/matter_sim",
-        force: bool = False,
+        overwrite: bool = False,
         log_level: str = "INFO",
         calc_type: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
@@ -595,7 +593,7 @@ def calc_orr_overpotential(
     Args:
         bulk: Bulk crystal structure
         outdir: Output directory for calculations
-        force: Force recalculation of existing results
+        overwrite: Force recalculation of existing results
         log_level: Logging level
         calc_type: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorption sites
@@ -645,7 +643,7 @@ def calc_orr_overpotential(
     logger.info("Running required molecule calculations...")
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
-        force=force, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
+        overwrite=overwrite, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
     )
 
     # 4. Calculate reaction energies and overpotential
@@ -667,7 +665,7 @@ def calc_orr_overpotential(
 def calc_cluster_orr_overpotential(
         cluster: Atoms,
         outdir: str = "result/matter_sim",
-        force: bool = False,
+        overwrite: bool = False,
         log_level: str = "INFO",
         calc_type: str = "mace",
         adsorbates: Dict[str, List[Tuple]] = None,
@@ -680,7 +678,7 @@ def calc_cluster_orr_overpotential(
     Args:
         cluster: cluster structure
         outdir: Base directory for calculations
-        force: Force recalculation of existing results
+        overwrite: Force recalculation of existing results
         log_level: Logging level
         calc_type: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of atomic indices for adsorption sites
@@ -738,7 +736,7 @@ def calc_cluster_orr_overpotential(
 
     results = calculate_required_molecules_with_indices(
         optimized_cluster, cluster_energy, outdir_path,
-        force=force, calc_type=calc_type, indices_dict=indices_dict, yaml_path=yaml_path,
+        overwrite=overwrite, calc_type=calc_type, indices_dict=indices_dict, yaml_path=yaml_path,
     )
 
     # 3. Calculate reaction energies and overpotential
@@ -755,10 +753,11 @@ def calc_cluster_orr_overpotential(
 
     return orr_results
 
+
 def calc_orr_overpotential_modified(
     bulk: Atoms,
     base_dir: str = "result/modified_surface",
-    force: bool = False,
+    overwrite: bool = False,
     log_level: str = "INFO",
     calc_type: str = "mace",
     orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
@@ -772,7 +771,7 @@ def calc_orr_overpotential_modified(
     Args:
         bulk: Bulk crystal structure
         base_dir: Base directory for calculation results
-        force: Force recalculation of existing results
+        overwrite: Force recalculation of existing results
         log_level: Logging level
         calc_type: Calculator type ("vasp", "mace")
         orr_adsorbates: Adsorption sites for ORR-related species
@@ -840,7 +839,7 @@ def calc_orr_overpotential_modified(
         modifier_molecule,
         modifier_offset,
         base_path,
-        force=force,
+        overwrite=overwrite,
         calc_type=calc_type,
         yaml_path=yaml_path
     )
@@ -860,7 +859,7 @@ def calc_orr_overpotential_modified(
         modified_slab,                # Modified slab
         modified_slab_energy,         # Modified slab energy
         result_dir,
-        force=force,
+        overwrite=overwrite,
         calc_type=calc_type,
         adsorbates=orr_adsorbates,
         yaml_path=yaml_path
