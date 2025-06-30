@@ -34,6 +34,7 @@ from .calc_orr_energy import (
     optimize_nanoparticle_structure,
     calculate_adsorption_with_offset,
     calculate_adsorption_with_indices,
+    attach_modifier_to_surface,
 )
 from .tool import convert_numpy_types
 
@@ -586,7 +587,7 @@ def get_overpotential_orr(
 
 def calc_orr_overpotential(
     bulk: Atoms,
-    base_dir: str = "result/matter_sim",
+    base_dir: str = "result/mace",
     force: bool = False,
     log_level: str = "INFO",
     calc_type: str = "mace",
@@ -761,4 +762,139 @@ def calc_nanoparticle_orr_overpotential(
         f.write(f"Overpotential η = {orr_results['eta']:.3f} V\n")
     logger.info("Summary written → %s", base_path / "ORR_summary.txt")
 
+    return orr_results
+
+def calc_orr_overpotential_modified(
+    bulk: Atoms,
+    base_dir: str = "result/modified_surface",
+    force: bool = False,
+    log_level: str = "INFO",
+    calc_type: str = "mace",
+    orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    modify_adsorbates: Dict[str, Atoms] = None,
+    modify_offset: Dict[str, List[Tuple[float, float]]] = None,
+    yaml_path: str = None,
+) -> Dict[str, Any]:
+    """
+    Calculate ORR overpotential on surface modified with adsorbates.
+    
+    Args:
+        bulk: Bulk crystal structure
+        base_dir: Base directory for calculation results
+        force: Force recalculation of existing results
+        log_level: Logging level
+        calc_type: Calculator type ("vasp", "mace")
+        orr_adsorbates: Adsorption sites for ORR-related species
+        modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
+        modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
+        yaml_path: Path to VASP configuration file
+        
+    Returns:
+        Dictionary containing overpotential and thermodynamic data
+    """
+
+    logger = logging.getLogger("orr_modified_surface")
+
+    # Logging configuration
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(levelname)s: %(message)s",
+        stream=sys.stdout,
+    )
+    
+    # Set default values
+    if orr_adsorbates is None:
+        orr_adsorbates = ADSORBATES
+    
+    # Check modifier molecules and positions
+    if modify_adsorbates is None or modify_offset is None:
+        raise ValueError("Surface modifier molecules (modify_adsorbates) and adsorption positions (modify_offset) are required")
+    
+    # Directory setup
+    base_path = Path(base_dir).resolve()
+    base_path.mkdir(parents=True, exist_ok=True)
+    
+    # --- 1. Bulk optimization ---
+    logger.info("Optimizing bulk structure...")
+    bulk_dir = base_path / "bulk"
+    bulk_dir.mkdir(parents=True, exist_ok=True)
+    
+    optimized_bulk, bulk_energy = optimize_bulk_structure(
+        bulk, str(bulk_dir), calc_type, yaml_path
+    )
+    write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
+    
+    # --- 2. Clean slab optimization ---
+    logger.info("Optimizing clean slab structure...")
+    slab_dir = base_path / "slab"
+    slab_dir.mkdir(parents=True, exist_ok=True)
+    
+    optimized_slab, slab_energy = optimize_slab_structure(
+        optimized_bulk, str(slab_dir), calc_type, yaml_path
+    )
+    write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
+    
+    # --- 3. Modifier molecule optimization and adsorption ---
+    # Use the first modifier molecule
+    modifier_name = list(modify_adsorbates.keys())[0]
+    modifier_molecule = modify_adsorbates[modifier_name]
+    modifier_offset = modify_offset[modifier_name][0]  # Use single position
+    
+    logger.info(f"Attaching surface modifier {modifier_name} at position {modifier_offset}...")
+    
+    modified_slab, modified_slab_energy = attach_modifier_to_surface(
+        optimized_slab,
+        slab_energy,
+        modifier_name,
+        modifier_molecule,
+        modifier_offset,
+        base_path,
+        force=force,
+        calc_type=calc_type,
+        yaml_path=yaml_path
+    )
+    
+    # Save modified slab
+    modified_slab_path = base_path / f"modified_slab_{modifier_name}.xyz"
+    modified_slab.write(str(modified_slab_path))
+    logger.info(f"Saved modified slab structure: {modified_slab_path}")
+    
+    # --- 4. ORR-related molecule adsorption calculations (on modified surface) ---
+    logger.info("Running ORR-related molecule calculations on modified surface...")
+    result_dir = base_path / "orr_on_modified_surface"
+    result_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Perform ORR molecule adsorption calculations on modified slab
+    results = calculate_required_molecules(
+        modified_slab,                # Modified slab
+        modified_slab_energy,         # Modified slab energy
+        result_dir,
+        force=force,
+        calc_type=calc_type,
+        adsorbates=orr_adsorbates,
+        yaml_path=yaml_path
+    )
+    
+    # --- 5. Reaction energy and overpotential calculation ---
+    reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy)
+    orr_results = get_overpotential_orr(
+        reaction_energies, result_dir, verbose=True, save_plot=True
+    )
+    overpotential = orr_results["eta"]
+    
+    # --- 6. Summary generation ---
+    with (base_path / "ORR_summary_modified_surface.txt").open("w") as f:
+        f.write(f"--- ORR Summary (Surface modifier: {modifier_name}) ---\n\n")
+        f.write(json.dumps(convert_numpy_types(energies), indent=2))
+        f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
+        f.write(f"Overpotential η = {overpotential:.3f} V\n")
+    
+    logger.info(f"Saved summary: {base_path / 'ORR_summary_modified_surface.txt'}")
+    
+    # Return results including modifier information
+    orr_results.update({
+        "modifier": modifier_name,
+        "modifier_offset": modifier_offset,
+    })
+    
     return orr_results
