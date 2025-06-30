@@ -14,9 +14,9 @@ from orr_overpotential_calculator import calc_cluster_orr_overpotential
 # ----------------
 # 引数の設定
 outdir = str(Path(__file__).parent / "result" / "Pt")
-force = True
+overwrite = True
 log_level = "INFO"
-calc_type = "mace"
+calculator = "mace"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 # ----------------
 
@@ -31,9 +31,9 @@ orr_adsorbates: Dict[str, List[Tuple]] = {
 result = calc_cluster_orr_overpotential(
     cluster=cluster,
     outdir=outdir,
-    force=force,
     log_level=log_level,
-    calc_type=calc_type,
+    overwrite=overwrite,
+    calculator=calculator,
     adsorbates=orr_adsorbates,
     yaml_path=yaml_path
 )

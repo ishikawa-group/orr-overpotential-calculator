@@ -176,7 +176,7 @@ def auto_lmaxmix(atoms):
 def my_calculator(
         atoms,
         kind: str,
-        calc_type: str = "mace",
+        calculator: str = "mace",
         yaml_path: str = "data/vasp.yaml",
         calc_directory: str = "calc"
 ):
@@ -186,7 +186,7 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calc_type: "vasp" / "mattersim" / "mace"- calculator type
+        calculator: "vasp" / "mattersim" / "mace"- calculator type
         yaml_path: Path to YAML configuration file
         calc_directory: Calculation directory for VASP
 
@@ -197,13 +197,13 @@ def my_calculator(
     import sys
     import torch
 
-    calc_type = calc_type.lower()
+    calculator = calculator.lower()
 
     # optimizer options
     fmax = 0.10
     steps = 100
 
-    if calc_type == "vasp":
+    if calculator == "vasp":
         from ase.calculators.vasp import Vasp
 
         # Load YAML file directly
@@ -236,7 +236,7 @@ def my_calculator(
         # Automatically set lmaxmix
         atoms = auto_lmaxmix(atoms)
 
-    elif calc_type == "mattersim":
+    elif calculator == "mattersim":
         from mattersim.forcefield.potential import MatterSimCalculator
         from ase.filters import ExpCellFilter
         from ase.optimize import FIRE
@@ -257,7 +257,7 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calc_type == "mattersim-matpes-pbe-d3":
+    elif calculator == "mattersim-matpes-pbe-d3":
         # Import the custom function
         from mattersim_matpes import mattersim_matpes_d3_calculator
         from ase.filters import ExpCellFilter
@@ -303,7 +303,7 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calc_type == "mattersim-matpes-pbe":
+    elif calculator == "mattersim-matpes-pbe":
         # Import the custom function
         from mattersim_matpes import mattersim_matpes_d3_calculator
         from ase.filters import ExpCellFilter
@@ -347,7 +347,7 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calc_type == "mace":
+    elif calculator == "mace":
         from mace.calculators import mace_mp
         from ase.filters import ExpCellFilter
         from ase.optimize import FIRE
@@ -391,7 +391,7 @@ def my_calculator(
             atoms = atoms
 
     else:
-        raise ValueError("calc_type must be 'vasp' or 'mattersim'")
+        raise ValueError("calculator must be 'vasp' or 'mattersim'")
 
     return atoms
 

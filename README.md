@@ -1,6 +1,6 @@
 # ORR Overpotential Calculator
 
-A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR).
+* A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR).
 
 ## Table of Contents
 
@@ -27,7 +27,13 @@ pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
 
 ## Quick Start
 
-Here's a minimal example to get you started:
+### Cluster
+
+* See `README.md` in `example/cluster/`.
+
+### General
+
+* Here's a minimal example to get you started:
 
 ```python
 from ase.build import fcc111
@@ -42,9 +48,10 @@ eta = result["eta"]
 
 print(f"ORR overpotential: {eta:.3f} V")
 ```
+
 ## Output
 
-The package generates several output files in the specified `base_dir`:
+* The package generates several output files in the specified `outdir`:
 
 - `ORR_summary.txt`: Summary of energies and overpotential
 - `ORR_free_energy_diagram.png`: Free energy diagram plot
@@ -53,14 +60,15 @@ The package generates several output files in the specified `base_dir`:
 
 ### Example Output: Free Energy Diagram
 
-The calculated free energy diagram shows the reaction pathway for the oxygen reduction reaction:
+* The calculated free energy diagram shows the reaction pathway for the oxygen reduction reaction:
 
 <img src="example/surface/result/ORR_free_energy_diagram_test.png" width="80%">
 
 *Figure: Example of the automatically generated free energy diagram showing the 4-electron ORR pathway on a catalyst surface.*
+
 ## Usage Examples
 
-### Basic Usage with VASP Calculator
+### Basic Usage with MACE Calculator
 
 ```python
 #!/usr/bin/env python3
@@ -71,10 +79,10 @@ from ase.build import fcc111
 from orr_overpotential_calculator import calc_orr_overpotential
 
 # Configuration parameters
-base_dir = str(Path(__file__).parent / "Pt111")
-force = True  # Overwrite existing calculations
+outdir = str(Path(__file__).parent / "Pt111")
+overwrite = True  # Overwrite existing calculations
 log_level = "INFO"
-calc_type = "vasp"
+calculator = "mace"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 
 # Create bulk structure
@@ -90,10 +98,10 @@ orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
 # Calculate ORR overpotential
 result = calc_orr_overpotential(
     bulk=bulk,
-    base_dir=base_dir,
-    force=force,
+    outdir=outdir,
+    overwrite=overwrite,
     log_level=log_level,
-    calc_type=calc_type,
+    calculator=calculator,
     adsorbates=orr_adsorbates,
     yaml_path=yaml_path
 )
@@ -106,26 +114,7 @@ limiting_potential = result["U_L"]
 print(f"ORR overpotential: {eta:.3f} V")
 print(f"Limiting potential: {limiting_potential:.3f} V")
 ```
-
-### Using MACE Calculator
-
-```python
-from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
-
-# Create structure
-bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
-
-# Use neural network potential
-result = calc_orr_overpotential(
-    bulk=bulk,
-    calc_type="mace",
-    base_dir="results_mace"
-)
-
-eta = result["eta"]
-print(f"ORR overpotential (mace): {eta:.3f} V")
-```
+* "vasp" can be also used as `calculator`.
 
 ### Custom Adsorption Sites
 
@@ -145,7 +134,7 @@ custom_sites = {
 result = calc_orr_overpotential(
     bulk=bulk,
     adsorbates=custom_sites,
-    base_dir="custom_sites"
+    outdir="custom_sites"
 )
 
 eta = result["eta"]
@@ -159,39 +148,16 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `bulk` | `Atoms` | Required | ASE Atoms object representing the bulk structure |
-| `base_dir` | `str` | `"result/matter_sim"` | Directory for saving calculation results |
-| `force` | `bool` | `False` | Whether to overwrite existing calculations |
+| `outdir` | `str` | `"result/matter_sim"` | Directory for saving calculation results |
+| `overwrite` | `bool` | `False` | Whether to overwrite existing calculations |
 | `log_level` | `str` | `"INFO"` | Logging level ("DEBUG", "INFO", "WARNING", "ERROR") |
-| `calc_type` | `str` | `"mace"` | Calculator type ("vasp", "mace") |
+| `calculator` | `str` | `"mace"` | Calculator type ("vasp", "mace") |
 | `adsorbates` | `Dict` | `None` | Custom adsorption site definitions (optional) |
 | `yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
 
-
-## Dependencies
-
-### Required Packages
-
-- **numpy**: Numerical computing
-- **matplotlib**: Plotting and visualization
-- **ase**: Atomic Simulation Environment
-- **pathlib**: Path handling (Python standard library)
-- **typing**: Type hints (Python standard library)
-
-### Optional Calculator Dependencies
-
-- **VASP**: Vienna Ab initio Simulation Package (for `calc_type="vasp"`)
-- **mace**: Neural Network Potential for Materials Simulation (for `calc_type="mace"`)
-
-### Installation of Calculator Dependencies
-
-```bash
-# For mace
-pip install mace
-```
-
 ## Output Files
 
-The package generates several output files in the specified `base_dir`:
+* The package generates several output files in the specified `outdir`:
 
 - `ORR_summary.txt`: Summary of energies and overpotential
 - `ORR_free_energy_diagram.png`: Free energy diagram plot
@@ -212,4 +178,4 @@ The package generates several output files in the specified `base_dir`:
 
 ## License
 
-MIT lincense
+* MIT lincense

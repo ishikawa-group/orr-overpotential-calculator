@@ -72,7 +72,7 @@ def optimize_gas_molecule(
     molecule_name: str,
     gas_box_size: float,
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Tuple[Atoms, float]:
     """
@@ -82,7 +82,7 @@ def optimize_gas_molecule(
         molecule_name: Name of molecule from MOLECULES dictionary
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -99,7 +99,7 @@ def optimize_gas_molecule(
     # Set up calculator and optimize
     optimized_molecule = my_calculator(
         molecule, "gas", 
-        calc_type=calc_type, 
+        calculator=calculator,
         yaml_path=yaml_path, 
         calc_directory=work_directory
     )
@@ -117,7 +117,7 @@ def optimize_gas_molecule(
 def optimize_bulk_structure(
     bulk_atoms: Atoms,
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Tuple[Atoms, float]:
     """
@@ -126,7 +126,7 @@ def optimize_bulk_structure(
     Args:
         bulk_atoms: Initial bulk structure
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -138,7 +138,7 @@ def optimize_bulk_structure(
     
     optimized_bulk = my_calculator(
         bulk_structure, "bulk",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -150,7 +150,7 @@ def optimize_bulk_structure(
 def optimize_slab_structure(
     optimized_bulk: Atoms,
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Tuple[Atoms, float]:
     """
@@ -159,7 +159,7 @@ def optimize_slab_structure(
     Args:
         optimized_bulk: Optimized bulk structure
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -173,7 +173,7 @@ def optimize_slab_structure(
     
     optimized_slab = my_calculator(
         slab, "slab",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -186,7 +186,7 @@ def optimize_cluster_structure(
     cluster: Atoms,
     gas_box_size: float,
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Tuple[Atoms, float]:
     """
@@ -196,7 +196,7 @@ def optimize_cluster_structure(
         cluster: Initial cluster structure
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -210,7 +210,7 @@ def optimize_cluster_structure(
     
     optimized_cluster = my_calculator(
         cluster_atoms, "cluster",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -222,7 +222,7 @@ def optimize_cluster_structure(
 def optimize_cluster_with_gas(
     cluster_gas: Atoms,
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Tuple[Atoms, float]:
     """
@@ -231,7 +231,7 @@ def optimize_cluster_with_gas(
     Args:
         cluster_gas: cluster with gas molecules
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -245,7 +245,7 @@ def optimize_cluster_with_gas(
     
     optimized_cluster_gas = my_calculator(
         cluster_gas_atoms, "cluster_gas",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -263,7 +263,7 @@ def calculate_adsorption_on_site(
     optimized_molecule: Atoms,
     site: str,
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Tuple[float, float]:
     """
@@ -274,7 +274,7 @@ def calculate_adsorption_on_site(
         optimized_molecule: Optimized gas molecule structure
         site: Adsorption site type ("ontop", "bridge", "fcc")
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -310,7 +310,7 @@ def calculate_adsorption_on_site(
     # Set up calculator and calculate energy
     slab_ads_calc = my_calculator(
         slab_with_adsorbate, "slab",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=site_directory
     )
@@ -333,7 +333,7 @@ def calculate_adsorption_with_offset(
     optimized_molecule: Atoms,
     offset: Tuple[float, float],
     work_directory: str,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH,
     ) -> Tuple[float, float]:
     """
@@ -344,7 +344,7 @@ def calculate_adsorption_with_offset(
         optimized_molecule: Optimized gas molecule structure
         offset: Fractional coordinate offset (x, y)
         work_directory: Directory for calculation files
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -383,7 +383,7 @@ def calculate_adsorption_with_offset(
     calculator = my_calculator(
         slab_with_adsorbate,
         "slab",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -405,7 +405,7 @@ def calculate_adsorption_with_indices(
     work_directory: str,
     height: float = None,
     orientation: list = None,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH,
     ) -> Tuple[float, float]:
     """
@@ -418,7 +418,7 @@ def calculate_adsorption_with_indices(
         work_directory: Directory for calculation files
         height: Adsorption height in Å (None uses default 2.0 Å)
         orientation: Molecule orientation vector (None for automatic)
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -456,7 +456,7 @@ def calculate_adsorption_with_indices(
     calculator = my_calculator(
         structure_with_adsorbate,
         kind="cluster_gas",
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -479,7 +479,7 @@ def calculate_adsorption_with_indices(
 def calculate_all_molecules(
     optimized_slab: Atoms,
     slab_energy: float,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = YAML_PATH
     ) -> Dict[str, Any]:
     """
@@ -488,7 +488,7 @@ def calculate_all_molecules(
     Args:
         optimized_slab: Optimized slab structure
         slab_energy: Energy of the clean slab (eV)
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -518,7 +518,7 @@ def calculate_all_molecules(
             # 1. Optimize gas molecule structure
             print(f"1) Optimizing {molecule_name} gas molecule...")
             optimized_molecule, gas_energy = optimize_gas_molecule(
-                molecule_name, GAS_BOX, gas_directory, calc_type, yaml_path
+                molecule_name, GAS_BOX, gas_directory, calculator, yaml_path
             )
 
             # 2. Calculate adsorption energies at different sites
@@ -528,7 +528,7 @@ def calculate_all_molecules(
             for site in SITES:
                 total_energy, elapsed_time = calculate_adsorption_on_site(
                     optimized_slab, optimized_molecule, site, 
-                    adsorption_directory, calc_type, yaml_path
+                    adsorption_directory, calculator, yaml_path
                 )
                 sites_data[site] = {
                     "E_total": total_energy,
@@ -583,7 +583,7 @@ def search_adsorption_site(
     base_dir: str = "result/adsorption_site",
     overwrite: bool = False,
     log_level: str = "INFO",
-    calc_type: str = "mace",
+    calculator: str = "mace",
     adsorbates: Dict[str, Atoms] = None,
     offset: Dict[str, List[Tuple[float, float]]] = None,
     yaml_path: str = None,
@@ -597,7 +597,7 @@ def search_adsorption_site(
         base_dir: Directory to save calculation results
         overwrite: Whether to overwrite existing calculation results
         log_level: Logging level
-        calc_type: Calculation type ("vasp", "mace", etc.)
+        calculator: Calculation type ("vasp", "mace", etc.)
         adsorbates: Dictionary of adsorbate molecules {name: Atoms}
         offset: Offset coordinates for adsorption sites {molecule_name: [(x1,y1), (x2,y2), ...]}
         yaml_path: Path to VASP configuration file
@@ -636,14 +636,14 @@ def search_adsorption_site(
     logger = logging.getLogger("adsorption_site_search")
     logger.info("Optimizing bulk structure...")
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(bulk_dir), calc_type, yaml_path
+        bulk, str(bulk_dir), calculator, yaml_path
     )
     write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
 
     # 4. Slab optimization
     logger.info("Optimizing slab structure...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(slab_dir), calc_type, yaml_path
+        optimized_bulk, str(slab_dir), calculator, yaml_path
     )
     write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
 
@@ -697,7 +697,7 @@ def search_adsorption_site(
                     molecule_name=temp_name,  # 正しい引数名
                     gas_box_size=GAS_BOX,
                     work_directory=str(gas_dir),
-                    calc_type=calc_type,
+                    calculator=calculator,
                     yaml_path=yaml_path
                 )
                 optimized_molecule.write(xyz_gas)
@@ -740,7 +740,7 @@ def search_adsorption_site(
                 logger.info(f"  -> Running adsorption calculation...")
                 total_energy, elapsed_time = calculate_adsorption_with_offset(
                     optimized_slab, optimized_molecule, offset_coord, str(work_dir),
-                    calc_type, yaml_path
+                    calculator, yaml_path
                 )
                 json.dump({
                     "E_total": total_energy,
@@ -832,7 +832,7 @@ def attach_modifier_to_surface(
     modifier_molecule: Atoms,
     offset: Tuple[float, float],
     base_directory: Path,
-    calc_type: str = "mace",
+    calculator: str = "mace",
     yaml_path: str = None,
     overwrite: bool = False,
     ) -> Tuple[Atoms, float]:
@@ -846,7 +846,7 @@ def attach_modifier_to_surface(
         modifier_molecule: Structure of the modifier molecule
         offset: Adsorption position (fractional coordinates)
         base_directory: Directory to save calculation results
-        calc_type: Calculation type
+        calculator: Calculation type
         yaml_path: Path to VASP configuration file
         overwrite: Whether to overwrite existing calculations
 
@@ -897,7 +897,7 @@ def attach_modifier_to_surface(
                 molecule_name=temp_name,
                 gas_box_size=GAS_BOX,
                 work_directory=str(gas_dir),
-                calc_type=calc_type,
+                calculator=calculator,
                 yaml_path=yaml_path
             )
             # Save results
@@ -952,7 +952,7 @@ def attach_modifier_to_surface(
         calculator = my_calculator(
             atoms=slab_with_adsorbate,
             kind="slab",
-            calc_type=calc_type,
+            calculator=calculator,
             yaml_path=yaml_path,
             calc_directory=str(work_dir)
         )
