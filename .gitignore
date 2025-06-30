@@ -22,6 +22,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 ENV/
 
 # IDE
@@ -30,75 +31,16 @@ ENV/
 *.swp
 
 # example ディレクトリ内のファイル管理
-example/*
-!example/surface/
+example/*/result
 
+example/nanoparticle/
+example/surface_2/
+example/surface_test/
 
-!example/nanoparticle/
-example/nanoparticle/**/*
-!example/nanoparticle/**/*.py
-!example/nanoparticle/**/*.md
-!example/nanoparticle/**/*.json
-!example/nanoparticle/**/*.png
-!example/nanoparticle/**/*.txt
-!example/nanoparticle/**/*.yaml
-
-!example/nanoparticle/result
-!example/nanoparticle/result/**/*.py
-!example/nanoparticle/result/**/*.json
-!example/nanoparticle/result/**/*.png
-!example/nanoparticle/result/**/*.txt
-!example/nanoparticle/result/**/*.yaml
-!example/nanoparticle/result/**/*.csv
-
-!example/nanoparticle/code
-!example/nanoparticle/code/**/*.py
-!example/nanoparticle/code/**/*.json
-!example/nanoparticle/code/**/*.png
-!example/nanoparticle/code/**/*.txt
-!example/nanoparticle/code/**/*.yaml
-
-!example/nanoparticle/Pt_nanoparticle_mattersim
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.py
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.json
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.png
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.txt
-!example/nanoparticle/Pt_nanoparticle_mattersim/**/*.yaml
-
-!example/nanoparticle/Pt_nanoparticle_vasp
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.py
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.json
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.png
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.txt
-!example/nanoparticle/Pt_nanoparticle_vasp/**/*.yaml
-
-!example/nanoparticle/Pt_nanoparticle_vasp/*/
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.py
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.json
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.png
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.txt
-!example/nanoparticle/Pt_nanoparticle_vasp/*/**/*.yaml
-
-!example/modified_surface/
-example/modified_surface/**/*
-!example/modified_surface/**/*.py
+example/modified_surface/**
 !example/modified_surface/**/*.md
-!example/modified_surface/**/*.json
+!example/modified_surface/**/*.py
 !example/modified_surface/**/*.png
-!example/modified_surface/**/*.txt
+!example/modified_surface/**/*.json
+!example/modified_surface/**/*.sh
 !example/modified_surface/**/*.yaml
-
-!example/modified_surface/result
-!example/modified_surface/result/**/*.py
-!example/modified_surface/result/**/*.json
-!example/modified_surface/result/**/*.png
-!example/modified_surface/result/**/*.txt
-!example/modified_surface/result/**/*.yaml
-!example/modified_surface/result/**/*.csv
-
-!example/modified_surface/code
-!example/modified_surface/code/**/*.py
-!example/modified_surface/code/**/*.json
-!example/modified_surface/code/**/*.png
-!example/modified_surface/code/**/*.txt
-!example/modified_surface/code/**/*.yaml
