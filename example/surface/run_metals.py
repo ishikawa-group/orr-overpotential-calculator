@@ -13,9 +13,9 @@ lattice_constants = {"Ni": 3.524, "Cu": 3.615, "Rh": 3.803, "Pd": 3.891, "Ag": 4
                      "Pt": 3.924, "Au": 4.078}
 
 # --- parameters
-force = True
+overwrite = True
 log_level = "INFO"
-calc_type = "mace"
+calculator = "mace"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 result_dir = Path(__file__).parent / "result"
 # ---
@@ -34,9 +34,9 @@ for metal in metals:
     result = calc_orr_overpotential(
         bulk=bulk,
         outdir=outdir,
-        force=force,
+        overwrite=overwrite,
         log_level=log_level,
-        calc_type=calc_type,
+        calculator=calculator,
         adsorbates=orr_adsorbates,
         yaml_path=yaml_path
     )

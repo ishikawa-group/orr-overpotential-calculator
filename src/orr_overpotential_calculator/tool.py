@@ -391,7 +391,7 @@ def my_calculator(
             atoms = atoms
 
     else:
-        raise ValueError("calculator must be 'vasp' or 'mattersim'")
+        raise ValueError("calculator must be 'vasp' or 'mace'")
 
     return atoms
 
