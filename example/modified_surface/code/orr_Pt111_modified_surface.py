@@ -11,14 +11,14 @@ from ase import Atoms
 # ORR過電圧計算関数をインポート
 from orr_overpotential_calculator import calc_orr_overpotential_modified
 
-#---------------------
+# ---------------------
 # 引数の設定
 base_dir = str(Path(__file__).parent.parent / "result/ORR/Pt111_CH3CN_test")
-force = True
+overwrite = True
 log_level = "INFO"
-calc_type = "vasp"
+calculator = "vasp"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
-#----------------
+# ----------------
 
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
@@ -50,9 +50,9 @@ modify_offset: Dict[str, List[Tuple[float, float]]] = {
 result = calc_orr_overpotential_modified(
     bulk=bulk,
     base_dir=base_dir,
-    force=force,
+    overwrite=overwrite,
     log_level=log_level,
-    calc_type=calc_type,
+    calculator=calculator,
     orr_adsorbates=orr_adsorbates,
     modify_adsorbates=modify_adsorbates,
     modify_offset=modify_offset,
