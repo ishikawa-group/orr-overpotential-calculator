@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Calculate energies of the ORR reaction
 """
@@ -582,7 +581,7 @@ def calculate_all_molecules(
 def search_adsorption_site(
     bulk: Atoms,
     base_dir: str = "result/adsorption_site",
-    force: bool = False,
+    overwrite: bool = False,
     log_level: str = "INFO",
     calc_type: str = "mace",
     adsorbates: Dict[str, Atoms] = None,
@@ -596,7 +595,7 @@ def search_adsorption_site(
     Args:
         bulk: Bulk crystal structure
         base_dir: Directory to save calculation results
-        force: Whether to overwrite existing calculation results
+        overwrite: Whether to overwrite existing calculation results
         log_level: Logging level
         calc_type: Calculation type ("vasp", "mace", etc.)
         adsorbates: Dictionary of adsorbate molecules {name: Atoms}
@@ -675,7 +674,7 @@ def search_adsorption_site(
         gas_json = gas_dir / "opt_gas_result.json"
         xyz_gas = gas_dir / "opt_gas.xyz"
 
-        if gas_json.exists() and not force:
+        if gas_json.exists() and not overwrite:
             # Load from existing results
             data = json.load(gas_json.open())
             gas_energy = data["E_opt"]
@@ -730,7 +729,7 @@ def search_adsorption_site(
 
             logger.info(f"Adsorption site {idx+1}/{len(offsets_list)}: {key}")
 
-            if offset_json.exists() and (work_dir / ".done").exists() and not force:
+            if offset_json.exists() and (work_dir / ".done").exists() and not overwrite:
                 # Load from existing results
                 data = json.load(offset_json.open())
                 total_energy = data["E_total"]
@@ -825,6 +824,7 @@ def search_adsorption_site(
 
     return summary
 
+
 def attach_modifier_to_surface(
     optimized_slab: Atoms,
     slab_energy: float,
@@ -834,8 +834,8 @@ def attach_modifier_to_surface(
     base_directory: Path,
     calc_type: str = "mace",
     yaml_path: str = None,
-    force: bool = False,  # ← 新しい引数を追加
-) -> Tuple[Atoms, float]:
+    overwrite: bool = False,
+    ) -> Tuple[Atoms, float]:
     """
     Optimize modifier molecule and adsorb it onto the slab surface.
 
@@ -848,7 +848,7 @@ def attach_modifier_to_surface(
         base_directory: Directory to save calculation results
         calc_type: Calculation type
         yaml_path: Path to VASP configuration file
-        force: Whether to overwrite existing calculations
+        overwrite: Whether to overwrite existing calculations
 
     Returns:
         Slab structure with adsorbed modifier molecule and its energy
@@ -871,7 +871,7 @@ def attach_modifier_to_surface(
     gas_json = gas_dir / "opt_result.json"
     xyz_gas = gas_dir / "opt.xyz"
 
-    if gas_json.exists() and xyz_gas.exists() and not force:
+    if gas_json.exists() and xyz_gas.exists() and not overwrite:
         # Load existing results
         with open(gas_json, "r") as f:
             data = json.load(f)
@@ -918,7 +918,7 @@ def attach_modifier_to_surface(
     adsorption_json = adsorption_dir / f"{key}.json"
     adsorption_xyz = adsorption_dir / f"{key}.xyz"
 
-    if adsorption_json.exists() and adsorption_xyz.exists() and not force:
+    if adsorption_json.exists() and adsorption_xyz.exists() and not overwrite:
         # Load existing results
         with open(adsorption_json, "r") as f:
             data = json.load(f)
