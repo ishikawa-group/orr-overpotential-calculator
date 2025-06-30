@@ -16,33 +16,34 @@ from orr_overpotential_calculator import calc_orr_overpotential_modified
 base_dir = str(Path(__file__).parent.parent / "result/ORR/Pt111_CH3CN_test")
 force = True
 log_level = "INFO"
-calc_type = "mace"
+calc_type = "vasp"
 yaml_path = str(Path(__file__).parent / "vasp.yaml")
 #----------------
 
-bulk = fcc111("Pt", size=(4, 4, 4), a=3.9, vacuum=None, periodic=True)
+bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
 orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
-    "HO2": [(0.66, 0.66), (1.5, 1.0), (1.33, 1.33)], #hcp, bridge, fcc
-    "O":   [(0.66, 0.66), (1.5, 1.0), (1.33, 1.33)],
-    "OH":  [(0.66, 0.66), (1.5, 1.0), (1.33, 1.33)],
+    "HO2": [(0.66, 0.66), (1.0, 0.0), (1.33, 1.33)], # hcp, ontop, fcc
+    "O":   [(0.66, 0.66), (1.0, 0.0), (1.33, 1.33)],
+    "OH":  [(0.66, 0.66), (1.0, 0.0), (1.33, 1.33)],
 }
 
-modify_adsorbates= {
-    # Adsorbates (gas + adsorption calculations)
-    "CH3CN":  Atoms("NCCHHH", positions=[
-        # 座標はÅ単位
-        ( 0.000,  0.000,  0.000),  # N: 窒素原子（表面方向）
-        ( 0.000,  0.000,  1.160),  # C: シアノ基の炭素
-        ( 0.000,  0.000,  2.630),  # C: メチル基の炭素
-        ( 1.037,  0.000,  2.997),  # H: 水素1
-        (-0.519,  0.898,  2.997),  # H: 水素2（重複していたのを修正）
-        (-0.519, -0.898,  2.997),  # H: 水素3
-    ])}
+# 表面に対して45度傾けたCH3CN分子の座標を定義
+modify_adsorbates = {
+    "CH3CN": Atoms("NCCHHH", positions=[
+        # 座標は Å
+        ( 0.000,  0.000,  0.000),   # N  (固定)
+        (0.820,  0.000,  0.820),   # C≡N の C
+        (1.860,  0.000,  1.860),   # CH3 の C
+        (1.386,  0.000,  2.852),   # H1
+        (2.486,  0.898,  1.752),   # H2
+        (2.486, -0.898,  1.752),   # H3
+    ])
+}
 
 # Default adsorption sites (fractional coordinates)
 modify_offset: Dict[str, List[Tuple[float, float]]] = {
-    "CH3CN": [(1.00, 1.00)],  # ontop
+    "CH3CN": [(1.50, 1.00)],  # bridge
 }
 
 # 関数呼び出しの変更：辞書として結果を受け取る
