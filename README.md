@@ -62,7 +62,7 @@ print(f"ORR overpotential: {eta:.3f} V")
 
 * The calculated free energy diagram shows the reaction pathway for the oxygen reduction reaction:
 
-<img src="example/surface/result/ORR_free_energy_diagram_test.png" width="80%">
+<img src="pt_free_energy.png" width="80%">
 
 *Figure: Example of the automatically generated free energy diagram showing the 4-electron ORR pathway on a catalyst surface.*
 
