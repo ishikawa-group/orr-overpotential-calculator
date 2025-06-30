@@ -32,3 +32,15 @@ ENV/
 
 # example ディレクトリ内のファイル管理
 example/*/result
+
+example/nanoparticle/
+example/surface_2/
+example/surface_test/
+
+example/modified_surface/**
+!example/modified_surface/**/*.md
+!example/modified_surface/**/*.py
+!example/modified_surface/**/*.png
+!example/modified_surface/**/*.json
+!example/modified_surface/**/*.sh
+!example/modified_surface/**/*.yaml
