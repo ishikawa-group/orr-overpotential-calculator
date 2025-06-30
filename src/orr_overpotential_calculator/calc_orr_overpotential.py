@@ -82,7 +82,7 @@ def calculate_required_molecules(
         slab_energy: float,
         outdir: Path,
         overwrite: bool = False,
-        calc_type: str = "mace",
+        calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         yaml_path: str = None,
     ) -> Dict[str, Any]:
@@ -94,7 +94,7 @@ def calculate_required_molecules(
         slab_energy: Energy of the optimized slab
         outdir: Base directory for calculations
         overwrite: Force recalculation of existing results
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
         yaml_path: Path to VASP configuration file
         
@@ -121,7 +121,7 @@ def calculate_required_molecules(
         xyz_gas = gas_dir / "opt.xyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
-            molecule_name, GAS_BOX, str(gas_dir), calc_type, yaml_path
+            molecule_name, GAS_BOX, str(gas_dir), calculator, yaml_path
         )
         optimized_molecule.write(xyz_gas)
         json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
@@ -150,7 +150,7 @@ def calculate_required_molecules(
                 # Perform new calculation
                 total_energy, elapsed_time = calculate_adsorption_with_offset(
                     optimized_slab, optimized_molecule, offset, str(work_dir),
-                    calc_type, yaml_path
+                    calculator, yaml_path
                 )
                 json.dump({
                     "E_total": total_energy,
@@ -190,7 +190,7 @@ def calculate_required_molecules_with_indices(
         slab_energy: float,
         outdir: Path,
         overwrite: bool = False,
-        calc_type: str = "mace",
+        calculator: str = "mace",
         indices_dict: Dict[str, List] = None,
         yaml_path: str = None,
         height: float = None,
@@ -204,7 +204,7 @@ def calculate_required_molecules_with_indices(
         slab_energy: Energy of the optimized slab
         outdir: Base directory for calculations
         overwrite: Force recalculation of existing results
-        calc_type: Calculator type
+        calculator: Calculator type
         indices_dict: Dictionary of atomic indices for each molecule
         yaml_path: Path to configuration file
         height: Adsorption height (optional)
@@ -237,7 +237,7 @@ def calculate_required_molecules_with_indices(
         xyz_gas = gas_dir / "opt.xyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
-            molecule_name, GAS_BOX, str(gas_dir), calc_type, yaml_path
+            molecule_name, GAS_BOX, str(gas_dir), calculator, yaml_path
         )
         optimized_molecule.write(xyz_gas)
         json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
@@ -269,7 +269,7 @@ def calculate_required_molecules_with_indices(
                 total_energy, elapsed_time = calculate_adsorption_with_indices(
                     optimized_slab, optimized_molecule, indices, str(work_dir),
                     height=height, orientation=orientation,
-                    calc_type=calc_type, yaml_path=yaml_path
+                    calculator=calculator, yaml_path=yaml_path
                 )
                 json.dump({
                     "E_total": total_energy,
@@ -583,7 +583,7 @@ def calc_orr_overpotential(
         outdir: str = "result/matter_sim",
         overwrite: bool = False,
         log_level: str = "INFO",
-        calc_type: str = "mace",
+        calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         yaml_path: str = None,
     ) -> Dict[str, Any]:
@@ -595,7 +595,7 @@ def calc_orr_overpotential(
         outdir: Output directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorption sites
         yaml_path: Path to VASP configuration file
 
@@ -616,26 +616,26 @@ def calc_orr_overpotential(
     outdir_path.mkdir(parents=True, exist_ok=True)
 
     # vaspでない場合はbulkディレクトリを作成
-    if calc_type != "vasp":
+    if calculator != "vasp":
         bulk_dir = outdir_path / "bulk"
         bulk_dir.mkdir(parents=True, exist_ok=True)
 
     # vaspでない場合はslabディレクトリを作成
-    if calc_type != "vasp":
+    if calculator != "vasp":
         slab_dir = outdir_path / "slab"
         slab_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Bulk optimization
     logger.info("Optimizing bulk structure...")
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(outdir_path / "bulk"), calc_type, yaml_path
+        bulk, str(outdir_path / "bulk"), calculator, yaml_path
     )
     write(str(outdir_path / "bulk" / "optimized_bulk.xyz"), optimized_bulk)
 
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(outdir_path / "slab"), calc_type, yaml_path
+        optimized_bulk, str(outdir_path / "slab"), calculator, yaml_path
     )
     write(str(outdir_path / "slab" / "optimized_slab.xyz"), optimized_slab)
 
@@ -643,7 +643,7 @@ def calc_orr_overpotential(
     logger.info("Running required molecule calculations...")
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
-        overwrite=overwrite, calc_type=calc_type, adsorbates=adsorbates, yaml_path=yaml_path,
+        overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, yaml_path=yaml_path,
     )
 
     # 4. Calculate reaction energies and overpotential
@@ -667,7 +667,7 @@ def calc_cluster_orr_overpotential(
         outdir: str = "result/matter_sim",
         overwrite: bool = False,
         log_level: str = "INFO",
-        calc_type: str = "mace",
+        calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple]] = None,
         yaml_path: str = None,
         vacuum_size: float = 20.0,
@@ -680,7 +680,7 @@ def calc_cluster_orr_overpotential(
         outdir: Base directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of atomic indices for adsorption sites
         yaml_path: Path to configuration file
         vacuum_size: Vacuum size around cluster (Å)
@@ -698,7 +698,7 @@ def calc_cluster_orr_overpotential(
     outdir_path.mkdir(parents=True, exist_ok=True)
 
     # vaspでない場合はclusterディレクトリを作成
-    if calc_type != "vasp":
+    if calculator != "vasp":
         cluster_dir = outdir_path / "cluster"
         cluster_dir.mkdir(parents=True, exist_ok=True)
 
@@ -714,7 +714,7 @@ def calc_cluster_orr_overpotential(
     gas_box = cluster_diameter + vacuum_size
 
     optimized_cluster, cluster_energy = optimize_cluster_structure(
-        cluster, gas_box, str(outdir_path / "cluster"), calc_type, yaml_path
+        cluster, gas_box, str(outdir_path / "cluster"), calculator, yaml_path
     )
 
     write(str(outdir_path / "cluster" / "optimized_cluster.xyz"), optimized_cluster)
@@ -736,7 +736,7 @@ def calc_cluster_orr_overpotential(
 
     results = calculate_required_molecules_with_indices(
         optimized_cluster, cluster_energy, outdir_path,
-        overwrite=overwrite, calc_type=calc_type, indices_dict=indices_dict, yaml_path=yaml_path,
+        overwrite=overwrite, calculator=calculator, indices_dict=indices_dict, yaml_path=yaml_path,
     )
 
     # 3. Calculate reaction energies and overpotential
@@ -759,7 +759,7 @@ def calc_orr_overpotential_modified(
     base_dir: str = "result/modified_surface",
     overwrite: bool = False,
     log_level: str = "INFO",
-    calc_type: str = "mace",
+    calculator: str = "mace",
     orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     modify_adsorbates: Dict[str, Atoms] = None,
     modify_offset: Dict[str, List[Tuple[float, float]]] = None,
@@ -773,7 +773,7 @@ def calc_orr_overpotential_modified(
         base_dir: Base directory for calculation results
         overwrite: Force recalculation of existing results
         log_level: Logging level
-        calc_type: Calculator type ("vasp", "mace")
+        calculator: Calculator type ("vasp", "mace")
         orr_adsorbates: Adsorption sites for ORR-related species
         modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
         modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
@@ -810,7 +810,7 @@ def calc_orr_overpotential_modified(
     bulk_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(bulk_dir), calc_type, yaml_path
+        bulk, str(bulk_dir), calculator, yaml_path
     )
     write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
 
@@ -820,7 +820,7 @@ def calc_orr_overpotential_modified(
     slab_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(slab_dir), calc_type, yaml_path
+        optimized_bulk, str(slab_dir), calculator, yaml_path
     )
     write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
 
@@ -840,7 +840,7 @@ def calc_orr_overpotential_modified(
         modifier_offset,
         base_path,
         overwrite=overwrite,
-        calc_type=calc_type,
+        calculator=calculator,
         yaml_path=yaml_path
     )
 
@@ -860,7 +860,7 @@ def calc_orr_overpotential_modified(
         modified_slab_energy,         # Modified slab energy
         result_dir,
         overwrite=overwrite,
-        calc_type=calc_type,
+        calculator=calculator,
         adsorbates=orr_adsorbates,
         yaml_path=yaml_path
     )
