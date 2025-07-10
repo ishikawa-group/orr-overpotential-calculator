@@ -385,110 +385,6 @@ def sort_atoms(atoms, axes=("z", "y", "x")):
 
     return sorted_atoms
 
-
-def slab_to_tensor(slab, grid_size):
-    """
-    Convert slab structure to 3D tensor based on grid size [x, y, z].
-    
-    First sorts by (z, y, x) axes to reshape into (z, y, x) format,
-    then inserts 0s alternately in x and y directions.
-    For each z layer, even layers (z index even) use basic pattern (even rows, even columns),
-    odd layers (z index odd) use shifted pattern (odd rows, odd columns).
-    
-    Parameters:
-        slab (ase.Atoms): Slab structure to convert (number of atoms must match x*y*z)
-        grid_size (list or tuple): [x, y, z] (example: [8, 8, 3])
-        
-    Returns:
-        tensor (torch.Tensor): Interleaved 3D tensor
-        Final shape is (z, new_y, new_x) where new_y = 2*y, new_x = 2*x
-    """
-    import torch
-
-    x_size, y_size, z_size = grid_size  # grid_size = [x, y, z]
-    total_cells = x_size * y_size * z_size
-
-    if len(slab) != total_cells:
-        raise ValueError(f"Number of atoms in slab {len(slab)} does not match grid cells {total_cells}")
-
-    # Sort and reshape to (z, y, x) format
-    sorted_slab = sort_atoms(slab, axes=("z", "y", "x"))
-    basic_tensor = torch.tensor(
-        sorted_slab.get_atomic_numbers(),
-        dtype=torch.int64
-    ).reshape(z_size, y_size, x_size)
-
-    # New tensor size (x,y directions: 2x)
-    new_x_size = 2 * x_size
-    new_y_size = 2 * y_size
-
-    # z remains the same
-    interleaved = torch.zeros((z_size, new_y_size, new_x_size), dtype=torch.int64)
-
-    # Set pattern for each z layer
-    for z in range(z_size):
-        if z % 2 == 0:
-            # Even z layer (human 1st, 3rd layer...):
-            # Basic tensor row i goes to interleaved row 2*i,
-            # columns also at even indices (0,2,4,...)
-            interleaved[z, 0::2, 0::2] = basic_tensor[z, :, :]
-        else:
-            # Odd z layer (human 2nd, 4th layer...):
-            # Basic tensor row i goes to interleaved row 2*i+1,
-            # columns also at odd indices (1,3,5,...)
-            interleaved[z, 1::2, 1::2] = basic_tensor[z, :, :]
-
-    return interleaved
-
-
-def tensor_to_slab(tensor, template_slab):
-    """
-    Restore slab structure (ASE Atoms object) from interleaved tensor.
-    For slab_to_tensor case, for each z layer:
-      - If z layer is even, interleaved[z, 0::2, 0::2] elements are original atomic numbers
-      - If z layer is odd, interleaved[z, 1::2, 1::2] elements are original atomic numbers
-    Extract each and reshape to original order ((z, y, x)).
-    
-    Parameters:
-        tensor (torch.Tensor): 3D tensor, shape is (z, new_y, new_x) with new_y = 2*y, new_x = 2*x
-        template_slab (ase.Atoms): Template for restoration (original slab structure, sorted)
-        
-    Returns:
-        new_slab (ase.Atoms): Slab structure restored with tensor information
-    """
-    import torch
-
-    z_size, new_y_size, new_x_size = tensor.shape
-
-    # Restore original y, x sizes (new size is 2x)
-    y_size = new_y_size // 2
-    x_size = new_x_size // 2
-    total_atoms = z_size * y_size * x_size
-
-    if total_atoms != len(template_slab):
-        raise ValueError("Number of atoms to restore from tensor does not match template_slab")
-
-    # Create list for each z layer
-    reconstructed = []
-    for z in range(z_size):
-        if z % 2 == 0:
-            # Even z layer: extract interleaved[z, 0::2, 0::2]
-            layer = tensor[z, 0::2, 0::2]
-        else:
-            # Odd z layer: extract interleaved[z, 1::2, 1::2]
-            layer = tensor[z, 1::2, 1::2]
-        # layer has shape (y_size, x_size)
-        reconstructed.append(layer.flatten())
-
-    # Concatenate to (z*y_size*x_size,) 1D array
-    new_atomic_nums = torch.cat(reconstructed).numpy()
-
-    new_slab = template_slab.copy()
-    new_slab.set_atomic_numbers(new_atomic_nums)
-
-    return new_slab
-
-
 def generate_result_csv(
         materials_data: Dict[str, str],
         output_csv: str = "orr_results.csv",
@@ -690,19 +586,6 @@ def create_orr_volcano_plot(
     # ΔG_O
     df["dG_O"] = df["dE_O"] + delta_zpe_o - delta_TS_o
 
-    # Calculate linear regression parameters for dG_O vs dG_OH relationship
-    from sklearn.linear_model import LinearRegression
-    from sklearn.metrics import r2_score
-    
-    X = df[["dG_O"]].values
-    y = df["dG_OH"].values
-    model = LinearRegression()
-    model.fit(X, y)
-    slope_dg = model.coef_[0]
-    intercept_dg = model.intercept_
-    y_pred = model.predict(X)
-    r2_dg = r2_score(y, y_pred)
-
     # Set font size
     plt.rcParams.update({'font.size': 12})
 
@@ -820,10 +703,6 @@ def create_orr_volcano_plot(
     plt.close()
 
     print(f"Volcano plot saved: {output_path}")
-    
-    # Generate dG_O vs dG_OH plot
-    dg_o_vs_dg_oh_path = output_path.parent / (output_path.stem + "_dG_O_vs_dG_OH" + output_path.suffix)
-    create_dg_o_vs_dg_oh_plot(df, str(dg_o_vs_dg_oh_path), label_column, dpi, figsize, markersize)
     
     return str(output_path)
 
