@@ -4,7 +4,7 @@ from pathlib import Path
 
 if __name__ == "__main__":
     script_dir = Path(__file__).parent
-    data_dir = script_dir / "results"
+    data_dir = script_dir / "result"
 
     # load existing data
     materials = {
@@ -19,10 +19,13 @@ if __name__ == "__main__":
     }
     
     # 出力ファイルのパスをスクリプトと同じディレクトリに指定
-    output_csv_path = script_dir / "results/orr_result.csv"
-    output_png_path = script_dir / "results/orr_volcano_plot.png"
+    output_csv_path = script_dir / "result/orr_result.csv"
+    output_png_path = script_dir / "result/orr_volcano_plot.png"
     
     # CSVファイルを生成
-    output_file = generate_result_csv(materials, str(output_csv_path), verbose=True)
+    solvent_correction_yaml_path = str(script_dir / "solvent_correction.yaml")
+    output_file = generate_result_csv(materials, str(output_csv_path), verbose=True, 
+                                     solvent_correction_yaml_path=solvent_correction_yaml_path)
 
-    create_orr_volcano_plot(output_csv_path, output_png_path)
+    create_orr_volcano_plot(output_csv_path, output_png_path, 
+                           solvent_correction_yaml_path=solvent_correction_yaml_path)

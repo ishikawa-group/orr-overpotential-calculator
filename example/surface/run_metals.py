@@ -16,7 +16,8 @@ lattice_constants = {"Ni": 3.524, "Cu": 3.615, "Rh": 3.803, "Pd": 3.891, "Ag": 4
 overwrite = True
 log_level = "INFO"
 calculator = "mace"
-yaml_path = str(Path(__file__).parent / "vasp.yaml")
+vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")
+solvent_correction_yaml_path = str(Path(__file__).parent / "solvent_correction.yaml")
 result_dir = Path(__file__).parent / "result"
 # ---
 
@@ -38,7 +39,8 @@ for metal in metals:
         log_level=log_level,
         calculator=calculator,
         adsorbates=orr_adsorbates,
-        yaml_path=yaml_path
+        vasp_yaml_path=vasp_yaml_path,
+        solvent_correction_yaml_path=solvent_correction_yaml_path
     )
 
     eta = result["eta"]

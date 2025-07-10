@@ -1,4 +1,6 @@
-# Manual for run_cluster.py
+# Cluster ORR calculation
+
+* The example code: `run_cluster.py`.
 
 ## What it does
 * This script calculates the ORR (Oxygen Reduction Reaction) overpotential for a platinum cluster.
