@@ -83,7 +83,8 @@ outdir = str(Path(__file__).parent / "Pt111")
 overwrite = True  # Overwrite existing calculations
 log_level = "INFO"
 calculator = "mace"
-yaml_path = str(Path(__file__).parent / "vasp.yaml")
+vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")
+solvent_correction_yaml_path = str(Path(__file__).parent / "solvent_correction.yaml")  # Optional
 
 # Create bulk structure
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
@@ -103,7 +104,8 @@ result = calc_orr_overpotential(
     log_level=log_level,
     calculator=calculator,
     adsorbates=orr_adsorbates,
-    yaml_path=yaml_path
+    vasp_yaml_path=vasp_yaml_path,
+    solvent_correction_yaml_path=solvent_correction_yaml_path
 )
 
 # Extract results
@@ -114,7 +116,8 @@ limiting_potential = result["U_L"]
 print(f"ORR overpotential: {eta:.3f} V")
 print(f"Limiting potential: {limiting_potential:.3f} V")
 ```
-* "vasp" can be also used as `calculator`.
+* "vasp" can also be used as `calculator`.
+* `solvent_correction_yaml_path` applies solvation corrections to adsorbate energies (default: O: 0, OOH: 0.25, OH: 0.5 eV).
 
 ### Custom Adsorption Sites
 
@@ -148,12 +151,13 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `bulk` | `Atoms` | Required | ASE Atoms object representing the bulk structure |
-| `outdir` | `str` | `"result/matter_sim"` | Directory for saving calculation results |
+| `outdir` | `str` | `"result"` | Directory for saving calculation results |
 | `overwrite` | `bool` | `False` | Whether to overwrite existing calculations |
 | `log_level` | `str` | `"INFO"` | Logging level ("DEBUG", "INFO", "WARNING", "ERROR") |
-| `calculator` | `str` | `"mace"` | Calculator type ("vasp", "mace") |
+| `calculator` | `str` | `"mace"` | Calculator type ("vasp", "mace", "mace-d3") |
 | `adsorbates` | `Dict` | `None` | Custom adsorption site definitions (optional) |
-| `yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
+| `vasp_yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
+| `solvent_correction_yaml_path` | `str` | `None` | Path to solvent correction YAML file (optional) |
 
 ## Output Files
 
