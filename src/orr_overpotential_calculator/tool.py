@@ -1,6 +1,8 @@
 from typing import Dict, List, Tuple, Union, Optional
 from pathlib import Path
 import numpy as np
+import yaml
+import os
 
 
 def convert_numpy_types(obj):
@@ -200,8 +202,8 @@ def my_calculator(
     calculator = calculator.lower()
 
     # optimizer options
-    fmax = 0.10
-    steps = 100
+    fmax = 0.05
+    steps = 300
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
@@ -236,118 +238,49 @@ def my_calculator(
         # Automatically set lmaxmix
         atoms = auto_lmaxmix(atoms)
 
-    elif calculator == "mattersim":
-        from mattersim.forcefield.potential import MatterSimCalculator
-        from ase.filters import ExpCellFilter
-        from ase.optimize import FIRE
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        atoms.calc = MatterSimCalculator(load_path="MatterSim-v1.0.0-5M.pth", device=device)
-
-        # Apply CellFilter for bulk calculations
-        if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
-
-        # Perform structure optimization
-        optimizer = FIRE(atoms)
-        optimizer.run(fmax=fmax, steps=steps)
-
-        if isinstance(atoms, ExpCellFilter):
-            atoms = atoms.atoms
-        else:
-            atoms = atoms
-
-    elif calculator == "mattersim-matpes-pbe-d3":
-        # Import the custom function
-        from mattersim_matpes import mattersim_matpes_d3_calculator
-        from ase.filters import ExpCellFilter
-        from ase.optimize import FIRE
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        # Use custom calculator with D3 dispersion corrections
-        calculator = mattersim_matpes_d3_calculator(
-            device=device,
-            dispersion=True,  # Enable D3 dispersion corrections
-            damping="bj",
-            dispersion_xc="pbe"
-        )
-
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        print("Warning: Calculator settings are protected and cannot be modified")
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
-        # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedCalculator(calculator)
-
-        # Apply CellFilter for bulk calculations
-        if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
-
-        # Perform structure optimization
-        optimizer = FIRE(atoms)
-        optimizer.run(fmax=fmax, steps=steps)
-
-        if isinstance(atoms, ExpCellFilter):
-            atoms = atoms.atoms
-        else:
-            atoms = atoms
-
-    elif calculator == "mattersim-matpes-pbe":
-        # Import the custom function
-        from mattersim_matpes import mattersim_matpes_d3_calculator
-        from ase.filters import ExpCellFilter
-        from ase.optimize import FIRE
-
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        # Use custom calculator with D3 dispersion corrections
-        calculator = mattersim_matpes_d3_calculator(
-            device=device,
-            dispersion=False,  # Enable D3 dispersion corrections
-        )
-
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        print("Warning: Calculator settings are protected and cannot be modified")
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
-        # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedCalculator(calculator)
-
-        # Apply CellFilter for bulk calculations
-        if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
-
-        # Perform structure optimization
-        optimizer = FIRE(atoms)
-        optimizer.run(fmax=fmax, steps=steps)
-
-        if isinstance(atoms, ExpCellFilter):
-            atoms = atoms.atoms
-        else:
-            atoms = atoms
-
     elif calculator == "mace":
+        from mace.calculators import mace_mp
+        from ase.filters import ExpCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
+
+        mace_calculator = mace_mp(model=url,
+                                  dispersion=False,
+                                  default_dtype="float64",
+                                  device=device)
+
+        # 設定変更を防ぐプロキシクラスを実装
+        class ProtectedMaceCalculator:
+            def __init__(self, calculator):
+                self._calculator = calculator
+
+            def __getattr__(self, name):
+                if name == 'set':
+                    def protected_set(*args, **kwargs):
+                        return self  # 何も変更せずに自身を返す
+
+                    return protected_set
+                return getattr(self._calculator, name)
+
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedMaceCalculator(mace_calculator)
+
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = ExpCellFilter(atoms)
+
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, ExpCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-d3":
         from mace.calculators import mace_mp
         from ase.filters import ExpCellFilter
         from ase.optimize import FIRE
@@ -560,6 +493,7 @@ def generate_result_csv(
         materials_data: Dict[str, str],
         output_csv: str = "orr_results.csv",
         verbose: bool = False,
+        solvent_correction_yaml_path: str = None,
     ) -> Optional[str]:
     """
     Compile ORR calculation results for multiple materials into CSV file
@@ -569,6 +503,7 @@ def generate_result_csv(
                        {'Pt111': 'path/to/Pt111/all_results.json', ...}
         output_csv: Output CSV file path
         verbose: Whether to show detailed output
+        solvent_correction_yaml_path: Path to solvent correction YAML file
         
     Returns:
         Path of generated CSV file
@@ -600,7 +535,7 @@ def generate_result_csv(
 
         # Calculate reaction energies
         try:
-            deltaEs, energies = compute_reaction_energies(results, E_slab)
+            deltaEs, energies = compute_reaction_energies(results, E_slab, solvent_correction_yaml_path)
 
             # Calculate overpotential (set output_dir to None to avoid file output if needed)
             output_dir = Path(json_path).parent if verbose else None
@@ -678,6 +613,7 @@ def create_orr_volcano_plot(
         figsize: tuple = (10, 10),
         markersize: int = 80,
         ideal_line: float = 1.23,
+        solvent_correction_yaml_path: str = None,
     ) -> str:
     """
     Generate ORR volcano plot (dG_OH vs Limiting potential)
@@ -685,13 +621,14 @@ def create_orr_volcano_plot(
     Args:
         csv_file: Input CSV file path
         output_file: Output image filename
-        x_column: Column name for x-axis
+        x_column: Column name for x-axis ("dG_OH" or "dG_O")
         y_column: Column name for y-axis
         label_column: Column name for legend
         dpi: Image resolution
         figsize: Figure size (width, height) in inches
         markersize: Marker size
         ideal_line: Ideal limiting potential value (V)
+        solvent_correction_yaml_path: Path to solvent correction YAML file (Note: Not used in this function as corrections are already applied in CSV generation)
         
     Returns:
         Path of saved image
@@ -700,38 +637,71 @@ def create_orr_volcano_plot(
     import matplotlib.pyplot as plt
     import numpy as np
     from pathlib import Path
+    import yaml
+    import os
 
     # Load CSV file
     df = pd.read_csv(csv_file)
 
-    # -------------- Calculate dG_OH -----------------
+    # Note: Solvent corrections are already applied in compute_reaction_energies
+    # when generating the CSV file, so we don't apply them again here to avoid double correction.
+
+    # -------------- Calculate dG_OH and dG_O -----------------
     # Constants
     T = 298.15  # K
 
-    # ZPE (eV)
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
     zpe = {
-        "H2": 0.35, "H2O": 0.57,
-        "Oads": 0.06, "OHads": 0.37, "OOHads": 0.44,
+        "H2": 0.27, "H2O": 0.57,
+        "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
     }
 
-    # Entropy term TS (eV) at 298 K
-    TS_H2 = 0.403  # eV
-    TS_H2O = 0.67  # eV
-    TS_OHads = 0.0  # eV
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    entropy = {
+        "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+        "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
+    }
 
-    # Electronic part ΔE_OH
+    # Calculate dG_OH
     # Reaction: H2O + * -> OH* + 1/2 H2
-    df["E_slab_OH"] = df["E_slab_OH"] - 0.1  # solvent correction
+    # E_slab_OH already includes solvent correction from compute_reaction_energies
     df["dE_OH"] = df["E_slab_OH"] - df["E_slab"] - (df["E_H2O_g"] - 0.5 * df["E_H2_g"])
 
-    # ZPE difference
-    delta_zpe = zpe["OHads"] - (zpe["H2O"] - 0.5 * zpe["H2"])  # eV
+    # ZPE difference for OH reaction
+    delta_zpe_oh = zpe["OHads"] - (zpe["H2O"] - 0.5 * zpe["H2"])  # eV
 
-    # -TΔS term (products - reactants) (adsorbate entropies ≈ 0)
-    delta_TS = (0.5 * TS_H2 + TS_OHads) - TS_H2O  # eV
+    # TΔS term (products - reactants) for OH reaction
+    delta_TS_oh = entropy["OHads"] - (entropy["H2O"] - 0.5 * entropy["H2"]) # eV
 
     # ΔG_OH
-    df["dG_OH"] = df["dE_OH"] + delta_zpe - delta_TS
+    df["dG_OH"] = df["dE_OH"] + delta_zpe_oh - delta_TS_oh
+
+    # Calculate dG_O
+    # Reaction: H2O + * -> O* + H2
+    # E_slab_O already includes solvent correction from compute_reaction_energies
+    df["dE_O"] = df["E_slab_O"] - df["E_slab"] - (df["E_H2O_g"] - df["E_H2_g"])
+
+    # ZPE difference for O reaction
+    delta_zpe_o = zpe["Oads"] - (zpe["H2O"] - zpe["H2"])  # eV
+
+    # TΔS term (products - reactants) for O reaction
+    delta_TS_o = entropy["Oads"] - (entropy["H2O"] - entropy["H2"]) # eV
+
+    # ΔG_O
+    df["dG_O"] = df["dE_O"] + delta_zpe_o - delta_TS_o
+
+    # Calculate linear regression parameters for dG_O vs dG_OH relationship
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import r2_score
+    
+    X = df[["dG_O"]].values
+    y = df["dG_OH"].values
+    model = LinearRegression()
+    model.fit(X, y)
+    slope_dg = model.coef_[0]
+    intercept_dg = model.intercept_
+    y_pred = model.predict(X)
+    r2_dg = r2_score(y, y_pred)
 
     # Set font size
     plt.rcParams.update({'font.size': 12})
@@ -768,31 +738,55 @@ def create_orr_volcano_plot(
             fontweight='bold'
         )
 
-    # Set x and y axis ranges
-    ax.set_xlim(-0.25, 1.75)
-    ax.set_ylim(-0.5, 1.5)
+    # Set x and y axis ranges based on x_column
+    if x_column == "dG_O":
+        ax.set_xlim(-0.5, 3.5)
+        ax.set_ylim(-0.5, 1.5)
+    else:  # dG_OH
+        ax.set_xlim(-0.4, 1.6)
+        ax.set_ylim(-0.5, 1.5)
 
     # Add theoretical lines
     # Ideal limiting potential (1.23V) horizontal line
     ax.axhline(y=ideal_line, color='k', linestyle="solid", linewidth=1.5, alpha=0.7,
                label=f'Ideal ({ideal_line} V)')
 
-    # Additional theoretical lines
-    x_vals = np.linspace(-1, 3, 100)
+    # Additional theoretical lines based on x_column
+    x_vals = np.linspace(-1, 4, 100)
 
-    # OH* -> H2O: y = -x + 1.72
-    y_vals_1 = -x_vals + 1.72
-    ax.plot(x_vals, y_vals_1, color='k', linestyle="dotted", alpha=0.7, linewidth=1.5, label='OH* -> H2O')
+    if x_column == "dG_OH":
+        # O2 -> HOO*: y = -x + 1.72
+        y_vals_1 = -x_vals + 1.72
+        ax.plot(x_vals, y_vals_1, color='k', linestyle="dotted", alpha=0.7, linewidth=1.5, label='O2 -> HOO*')
 
-    # O2 -> HOO*: y = x
-    y_vals_2 = x_vals
-    ax.plot(x_vals, y_vals_2, color='k', linestyle="dashed", alpha=0.7, linewidth=1.5, label='O2 -> HOO*')
+        # OH* -> H2O: y = x
+        y_vals_2 = x_vals
+        ax.plot(x_vals, y_vals_2, color='k', linestyle="dashed", alpha=0.7, linewidth=1.5, label='OH* -> H2O')
+    
+    elif x_column == "dG_O":
+        # Use linear regression relationship: dG_OH = slope_dg * dG_O + intercept_dg
+        # Convert dG_OH-based lines to dG_O-based lines
+        
+        # Original dG_OH lines:
+        # OH* -> H2O: y = -dG_OH + 1.72
+        # O2 -> HOO*: y = dG_OH
+        
+        # Convert to dG_O using: dG_OH = slope_dg * dG_O + intercept_dg
+        
+        # OH* -> H2O line: y = -(slope_dg * dG_O + intercept_dg) + 1.72 = -slope_dg * dG_O + (1.72 - intercept_dg)
+        #y_vals_1 = -slope_dg * x_vals + (1.72 - intercept_dg)
+        y_vals_1 = -(0.5) * x_vals + 1.72
+        ax.plot(x_vals, y_vals_1, color='k', linestyle="dotted", alpha=0.7, linewidth=1.5, label='OH* -> H2O')
+
+        # O2 -> HOO* line: y = slope_dg * dG_O + intercept_dg
+        y_vals_2 = (0.5) * x_vals
+        ax.plot(x_vals, y_vals_2, color='k', linestyle="dashed", alpha=0.7, linewidth=1.5, label='O2 -> HOO*')
 
     # x = 0.86 vertical line
     # ax.axvline(x=0.86, color='k', linestyle='--', linewidth=1.5, alpha=0.7, label='x = 0.86')
 
     # Graph settings
-    ax.set_xlabel(f'ΔG_OH (eV)', fontsize=14, fontweight='bold')
+    ax.set_xlabel(f'{x_column} (eV)', fontsize=14, fontweight='bold')
     ax.set_ylabel(f'{y_column} (V)', fontsize=14, fontweight='bold')
     ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
     ax.grid(True, linestyle='--', alpha=0.6)
@@ -826,7 +820,138 @@ def create_orr_volcano_plot(
     plt.close()
 
     print(f"Volcano plot saved: {output_path}")
+    
+    # Generate dG_O vs dG_OH plot
+    dg_o_vs_dg_oh_path = output_path.parent / (output_path.stem + "_dG_O_vs_dG_OH" + output_path.suffix)
+    create_dg_o_vs_dg_oh_plot(df, str(dg_o_vs_dg_oh_path), label_column, dpi, figsize, markersize)
+    
     return str(output_path)
+
+
+def create_dg_o_vs_dg_oh_plot(
+        df,
+        output_file: str,
+        label_column: str = "Material",
+        dpi: int = 300,
+        figsize: tuple = (10, 8),
+        markersize: int = 80,
+    ) -> str:
+    """
+    Generate dG_O vs dG_OH correlation plot with linear regression
+    
+    Args:
+        df: DataFrame containing dG_O and dG_OH data
+        output_file: Output image filename
+        label_column: Column name for legend
+        dpi: Image resolution
+        figsize: Figure size (width, height) in inches
+        markersize: Marker size
+        
+    Returns:
+        Tuple of (path of saved image, slope, intercept, r2_score)
+    """
+    import matplotlib.pyplot as plt
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import r2_score
+    
+    # Set font size
+    plt.rcParams.update({'font.size': 12})
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Set colormap
+    cmap = plt.cm.viridis
+    norm = plt.Normalize(0, len(df) - 1)
+    
+    # Plot each material with explicitly defined colors
+    colors = [cmap(norm(i)) for i in range(len(df))]
+    
+    for i, (_, row) in enumerate(df.iterrows()):
+        ax.scatter(
+            row["dG_O"],
+            row["dG_OH"],
+            color=colors[i],
+            s=markersize,
+            alpha=0.8,
+            edgecolor='black',
+            label=row[label_column]
+        )
+    
+    # Add labels to each point
+    for i, (_, row) in enumerate(df.iterrows()):
+        ax.annotate(
+            row[label_column],
+            (row["dG_O"], row["dG_OH"]),
+            xytext=(5, 5),
+            textcoords='offset points',
+            fontsize=10,
+            fontweight='bold'
+        )
+    
+    # Perform linear regression
+    X = df[["dG_O"]].values
+    y = df["dG_OH"].values
+    
+    model = LinearRegression()
+    model.fit(X, y)
+    
+    # Calculate R²
+    y_pred = model.predict(X)
+    r2 = r2_score(y, y_pred)
+    
+    # Get regression parameters
+    slope = model.coef_[0]
+    intercept = model.intercept_
+    
+    # Plot regression line
+    x_range = np.linspace(df["dG_O"].min() - 0.5, df["dG_O"].max() + 0.5, 100)
+    y_range = model.predict(x_range.reshape(-1, 1))
+    ax.plot(x_range, y_range, 'r-', linewidth=2, alpha=0.8, label='Linear fit')
+    
+    # Add equation and R² to the plot
+    equation_text = f'dG_OH = {slope:.3f} × dG_O + {intercept:.3f}\nR² = {r2:.3f}'
+    
+    # Position the text box in upper left corner
+    ax.text(0.05, 0.95, equation_text, 
+            transform=ax.transAxes, 
+            fontsize=12, 
+            fontweight='bold',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+            verticalalignment='top')
+    
+    # Set axis labels and title
+    ax.set_xlabel('dG_O (eV)', fontsize=14, fontweight='bold')
+    ax.set_ylabel('dG_OH (eV)', fontsize=14, fontweight='bold')
+    ax.set_title('dG_O vs dG_OH Correlation', fontsize=16, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.6)
+    
+    # Material legend
+    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i],
+                          markersize=10, markeredgecolor='black') for i in range(len(df))]
+    legend1 = ax.legend(handles, df[label_column],
+                        title='Materials',
+                        loc='lower right',
+                        frameon=True)
+    ax.add_artist(legend1)
+    
+    # Regression line legend
+    handles2 = [plt.Line2D([0], [0], color='red', linewidth=2)]
+    labels2 = ['Linear fit']
+    legend2 = ax.legend(handles2, labels2,
+                        loc='upper right',
+                        frameon=True)
+    
+    # Adjust graph layout
+    plt.tight_layout()
+    
+    # Save image
+    output_path = Path(output_file)
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.close()
+    
+    print(f"dG_O vs dG_OH plot saved: {output_path}")
+    return str(output_path), slope, intercept, r2
 
 
 def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):

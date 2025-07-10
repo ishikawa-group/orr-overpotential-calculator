@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
+import yaml
+
 import numpy as np
 from ase import Atoms
 from ase.build import fcc111, add_adsorbate
@@ -84,7 +86,7 @@ def calculate_required_molecules(
         overwrite: bool = False,
         calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
-        yaml_path: str = None,
+        vasp_yaml_path: str = None,
     ) -> Dict[str, Any]:
     """
     Calculate gas-phase and adsorption energies for all required molecules.
@@ -96,7 +98,7 @@ def calculate_required_molecules(
         overwrite: Force recalculation of existing results
         calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
-        yaml_path: Path to VASP configuration file
+        vasp_yaml_path: Path to VASP configuration file
         
     Returns:
         Dictionary containing all calculation results
@@ -121,7 +123,7 @@ def calculate_required_molecules(
         xyz_gas = gas_dir / "opt.xyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
-            molecule_name, GAS_BOX, str(gas_dir), calculator, yaml_path
+            molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
         )
         optimized_molecule.write(xyz_gas)
         json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
@@ -150,7 +152,7 @@ def calculate_required_molecules(
                 # Perform new calculation
                 total_energy, elapsed_time = calculate_adsorption_with_offset(
                     optimized_slab, optimized_molecule, offset, str(work_dir),
-                    calculator, yaml_path
+                    calculator, vasp_yaml_path
                 )
                 json.dump({
                     "E_total": total_energy,
@@ -192,7 +194,7 @@ def calculate_required_molecules_with_indices(
         overwrite: bool = False,
         calculator: str = "mace",
         indices_dict: Dict[str, List] = None,
-        yaml_path: str = None,
+        vasp_yaml_path: str = None,
         height: float = None,
         orientation: list = None,
     ) -> Dict[str, Any]:
@@ -206,7 +208,7 @@ def calculate_required_molecules_with_indices(
         overwrite: Force recalculation of existing results
         calculator: Calculator type
         indices_dict: Dictionary of atomic indices for each molecule
-        yaml_path: Path to configuration file
+        vasp_yaml_path: Path to configuration file
         height: Adsorption height (optional)
         orientation: Molecular orientation vector (optional)
         
@@ -237,7 +239,7 @@ def calculate_required_molecules_with_indices(
         xyz_gas = gas_dir / "opt.xyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
-            molecule_name, GAS_BOX, str(gas_dir), calculator, yaml_path
+            molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
         )
         optimized_molecule.write(xyz_gas)
         json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
@@ -269,7 +271,7 @@ def calculate_required_molecules_with_indices(
                 total_energy, elapsed_time = calculate_adsorption_with_indices(
                     optimized_slab, optimized_molecule, indices, str(work_dir),
                     height=height, orientation=orientation,
-                    calculator=calculator, yaml_path=yaml_path
+                    calculator=calculator, vasp_yaml_path=vasp_yaml_path
                 )
                 json.dump({
                     "E_total": total_energy,
@@ -311,7 +313,8 @@ def calculate_required_molecules_with_indices(
 
 def compute_reaction_energies(
         results: Dict[str, Any],
-        slab_energy: float
+        slab_energy: float,
+        solvent_correction_yaml_path: str = None
     ) -> Tuple[List[float], Dict[str, float]]:
     """
     Compute reaction energies for the 4-electron ORR pathway.
@@ -319,6 +322,7 @@ def compute_reaction_energies(
     Args:
         results: Dictionary containing calculation results
         slab_energy: Energy of the clean slab
+        solvent_correction_yaml_path: Path to YAML file containing solvent corrections
         
     Returns:
         Tuple of (reaction energies list, energies dictionary)
@@ -341,9 +345,18 @@ def compute_reaction_energies(
     E_slab_OH = get_total_energy("OH")
 
     # Apply solvent corrections
-    # References: https://doi.org/10.1016/j.cattod.2018.07.036, https://doi.org/10.1039/D0NR03339A
-    E_slab_OOH = E_slab_OOH - 0.1
-    E_slab_OH = E_slab_OH - 0.2
+    # References: https://doi.org/10.1016/j.cattod.2018.07.036, https://pubs.acs.org/doi/10.1021/acs.jpclett.7b01018
+    if solvent_correction_yaml_path and os.path.exists(solvent_correction_yaml_path):
+        with open(solvent_correction_yaml_path, 'r') as f:
+            solvent_corrections = yaml.safe_load(f)
+        E_slab_O = E_slab_O - solvent_corrections.get('O', 0)
+        E_slab_OOH = E_slab_OOH - solvent_corrections.get('OOH', 0.25)
+        E_slab_OH = E_slab_OH - solvent_corrections.get('OH', 0.5)
+    else:
+        # Default solvent corrections
+        E_slab_O = E_slab_O - 0
+        E_slab_OOH = E_slab_OOH - 0.25
+        E_slab_OH = E_slab_OH - 0.5
 
     # Store all energies
     energies = {
@@ -393,16 +406,16 @@ def get_overpotential_orr(
     reaction_count = 4  # 4-electron pathway
     assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/ja405997s
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
     zpe = {
-        "H2": 0.35, "H2O": 0.57,
-        "Oads": 0.06, "OHads": 0.37, "OOHads": 0.44,
+        "H2": 0.27, "H2O": 0.57,
+        "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
     }
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/ja405997s
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
     #
     entropy = {
-        "H2": 0.403 / temperature, "H2O": 0.67 / temperature,
+        "H2": 0.40 / temperature, "H2O": 0.67 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
 
@@ -585,7 +598,8 @@ def calc_orr_overpotential(
         log_level: str = "INFO",
         calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
-        yaml_path: str = None,
+        vasp_yaml_path: str = None,
+        solvent_correction_yaml_path: str = None,
     ) -> Dict[str, Any]:
     """
     Calculate ORR overpotential for slab systems.
@@ -597,7 +611,8 @@ def calc_orr_overpotential(
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorption sites
-        yaml_path: Path to VASP configuration file
+        vasp_yaml_path: Path to VASP configuration file
+        solvent_correction_yaml_path: Path to solvent correction YAML file
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -628,14 +643,14 @@ def calc_orr_overpotential(
     # 1. Bulk optimization
     logger.info("Optimizing bulk structure...")
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(outdir_path / "bulk"), calculator, yaml_path
+        bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
     )
     write(str(outdir_path / "bulk" / "optimized_bulk.xyz"), optimized_bulk)
 
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(outdir_path / "slab"), calculator, yaml_path
+        optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path
     )
     write(str(outdir_path / "slab" / "optimized_slab.xyz"), optimized_slab)
 
@@ -643,11 +658,11 @@ def calc_orr_overpotential(
     logger.info("Running required molecule calculations...")
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
-        overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, yaml_path=yaml_path,
+        overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, vasp_yaml_path=vasp_yaml_path,
     )
 
     # 4. Calculate reaction energies and overpotential
-    reaction_energies, energies = compute_reaction_energies(results, slab_energy)
+    reaction_energies, energies = compute_reaction_energies(results, slab_energy, solvent_correction_yaml_path)
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
     overpotential = orr_results["eta"]
 
@@ -669,7 +684,8 @@ def calc_cluster_orr_overpotential(
         log_level: str = "INFO",
         calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple]] = None,
-        yaml_path: str = None,
+        vasp_yaml_path: str = None,
+        solvent_correction_yaml_path: str = None,
         vacuum_size: float = 20.0,
     ) -> Dict[str, Any]:
     """
@@ -682,7 +698,8 @@ def calc_cluster_orr_overpotential(
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of atomic indices for adsorption sites
-        yaml_path: Path to configuration file
+        vasp_yaml_path: Path to configuration file
+        solvent_correction_yaml_path: Path to solvent correction YAML file
         vacuum_size: Vacuum size around cluster (Å)
         
     Returns:
@@ -714,7 +731,7 @@ def calc_cluster_orr_overpotential(
     gas_box = cluster_diameter + vacuum_size
 
     optimized_cluster, cluster_energy = optimize_cluster_structure(
-        cluster, gas_box, str(outdir_path / "cluster"), calculator, yaml_path
+        cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path
     )
 
     write(str(outdir_path / "cluster" / "optimized_cluster.xyz"), optimized_cluster)
@@ -736,11 +753,11 @@ def calc_cluster_orr_overpotential(
 
     results = calculate_required_molecules_with_indices(
         optimized_cluster, cluster_energy, outdir_path,
-        overwrite=overwrite, calculator=calculator, indices_dict=indices_dict, yaml_path=yaml_path,
+        overwrite=overwrite, calculator=calculator, indices_dict=indices_dict, vasp_yaml_path=vasp_yaml_path,
     )
 
     # 3. Calculate reaction energies and overpotential
-    reaction_energies, energies = compute_reaction_energies(results, cluster_energy)
+    reaction_energies, energies = compute_reaction_energies(results, cluster_energy, solvent_correction_yaml_path)
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
 
     # 4. Write summary
@@ -763,7 +780,8 @@ def calc_orr_overpotential_modified(
     orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     modify_adsorbates: Dict[str, Atoms] = None,
     modify_offset: Dict[str, List[Tuple[float, float]]] = None,
-    yaml_path: str = None,
+    vasp_yaml_path: str = None,
+    solvent_correction_yaml_path: str = None,
 ) -> Dict[str, Any]:
     """
     Calculate ORR overpotential on surface modified with adsorbates.
@@ -777,7 +795,8 @@ def calc_orr_overpotential_modified(
         orr_adsorbates: Adsorption sites for ORR-related species
         modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
         modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
-        yaml_path: Path to VASP configuration file
+        vasp_yaml_path: Path to VASP configuration file
+        solvent_correction_yaml_path: Path to solvent correction YAML file
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -810,7 +829,7 @@ def calc_orr_overpotential_modified(
     bulk_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(bulk_dir), calculator, yaml_path
+        bulk, str(bulk_dir), calculator, vasp_yaml_path
     )
     write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
 
@@ -820,7 +839,7 @@ def calc_orr_overpotential_modified(
     slab_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(slab_dir), calculator, yaml_path
+        optimized_bulk, str(slab_dir), calculator, vasp_yaml_path
     )
     write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
 
@@ -841,7 +860,7 @@ def calc_orr_overpotential_modified(
         base_path,
         overwrite=overwrite,
         calculator=calculator,
-        yaml_path=yaml_path
+        vasp_yaml_path=vasp_yaml_path
     )
 
     # Save modified slab
@@ -862,11 +881,11 @@ def calc_orr_overpotential_modified(
         overwrite=overwrite,
         calculator=calculator,
         adsorbates=orr_adsorbates,
-        yaml_path=yaml_path
+        vasp_yaml_path=vasp_yaml_path
     )
 
     # --- 5. Reaction energy and overpotential calculation ---
-    reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy)
+    reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy, solvent_correction_yaml_path)
     orr_results = get_overpotential_orr(
         reaction_energies, result_dir, verbose=True, save_plot=True
     )
