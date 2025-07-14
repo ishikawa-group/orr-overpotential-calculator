@@ -120,7 +120,7 @@ def calculate_required_molecules(
 
         # 1. Gas-phase optimization
         gas_json = gas_dir / "opt_result.json"
-        xyz_gas = gas_dir / "opt.xyz"
+        xyz_gas = gas_dir / "opt.extxyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
             molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
@@ -236,7 +236,7 @@ def calculate_required_molecules_with_indices(
 
         # 1. Gas-phase optimization
         gas_json = gas_dir / "opt_result.json"
-        xyz_gas = gas_dir / "opt.xyz"
+        xyz_gas = gas_dir / "opt.extxyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
             molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
@@ -645,14 +645,14 @@ def calc_orr_overpotential(
     optimized_bulk, bulk_energy = optimize_bulk_structure(
         bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
     )
-    write(str(outdir_path / "bulk" / "optimized_bulk.xyz"), optimized_bulk)
+    write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
 
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
         optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path
     )
-    write(str(outdir_path / "slab" / "optimized_slab.xyz"), optimized_slab)
+    write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
 
     # 3. Gas and adsorption calculations (offset scheme)
     logger.info("Running required molecule calculations...")
@@ -734,7 +734,7 @@ def calc_cluster_orr_overpotential(
         cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path
     )
 
-    write(str(outdir_path / "cluster" / "optimized_cluster.xyz"), optimized_cluster)
+    write(str(outdir_path / "cluster" / "optimized_cluster.extxyz"), optimized_cluster)
 
     # 2. Gas and adsorption calculations (index scheme)
     logger.info("Running required molecule calculations...")
@@ -831,7 +831,7 @@ def calc_orr_overpotential_modified(
     optimized_bulk, bulk_energy = optimize_bulk_structure(
         bulk, str(bulk_dir), calculator, vasp_yaml_path
     )
-    write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
+    write(str(bulk_dir / "optimized_bulk.extxyz"), optimized_bulk)
 
     # --- 2. Clean slab optimization ---
     logger.info("Optimizing clean slab structure...")
@@ -841,7 +841,7 @@ def calc_orr_overpotential_modified(
     optimized_slab, slab_energy = optimize_slab_structure(
         optimized_bulk, str(slab_dir), calculator, vasp_yaml_path
     )
-    write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
+    write(str(slab_dir / "optimized_slab.extxyz"), optimized_slab)
 
     # --- 3. Modifier molecule optimization and adsorption ---
     # Use the first modifier molecule
@@ -864,7 +864,7 @@ def calc_orr_overpotential_modified(
     )
 
     # Save modified slab
-    modified_slab_path = base_path / f"modified_slab_{modifier_name}.xyz"
+    modified_slab_path = base_path / f"modified_slab_{modifier_name}.extxyz"
     modified_slab.write(str(modified_slab_path))
     logger.info(f"Saved modified slab structure: {modified_slab_path}")
 

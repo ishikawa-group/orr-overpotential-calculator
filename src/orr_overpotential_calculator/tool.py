@@ -20,12 +20,14 @@ def convert_numpy_types(obj):
     return obj
 
 
-def get_number_of_layers(atoms):
+def get_number_of_layers(atoms, gap_threshold=1.0):
     """
     Calculate the number of layers in a model based on atomic z-coordinates.
+    Uses gap detection to identify physical layers.
     
     Args:
         atoms: ASE atoms object
+        gap_threshold: Minimum gap size (Å) to separate layers (default: 1.0)
         
     Returns:
         int: Number of layers
@@ -33,52 +35,77 @@ def get_number_of_layers(atoms):
     import numpy as np
 
     positions = atoms.positions
-    # Round z-coordinates for layer identification (3 decimal places)
-    z_positions = np.round(positions[:, 2], decimals=3)
-    num_layers = len(set(z_positions))
+    z_coords = positions[:, 2]
+    
+    # Sort all z-coordinates to find natural layer breaks
+    sorted_z = np.sort(z_coords)
+    z_diffs = np.diff(sorted_z)
+    
+    # Count large gaps + 1 = number of layers
+    large_gaps = np.sum(z_diffs > gap_threshold)
+    num_layers = large_gaps + 1
+    
     return num_layers
 
 
-def set_tags_by_z(atoms):
+def set_tags_by_z(atoms, gap_threshold=1.0):
     """
     Set tags for each layer based on atomic z-coordinates.
+    Uses gap detection to identify physical layers for robust layer assignment.
     Each layer is assigned tags 0, 1, 2... from bottom to top.
     
     Args:
         atoms: ASE atoms object
+        gap_threshold: Minimum gap size (Å) to separate layers (default: 1.0)
         
     Returns:
         ASE atoms object with tags set
     """
     import numpy as np
-    import pandas as pd
 
     new_atoms = atoms.copy()
     positions = new_atoms.positions
-    # Round to 1 decimal place (used as layer width guideline)
-    z_positions = np.round(positions[:, 2], decimals=1)
-
-    # Extract unique layer values and ensure ascending order
-    bins = np.sort(np.array(list(set(z_positions)))) + 1.0e-2
-    bins = np.insert(bins, 0, 0)
-
-    # Set labels for each interval (0, 1, 2, ...)
-    labels = list(range(len(bins) - 1))
-    tags = pd.cut(z_positions, bins=bins, labels=labels, include_lowest=True).tolist()
+    z_coords = positions[:, 2]
+    
+    # Sort all z-coordinates to find natural layer breaks
+    sorted_indices = np.argsort(z_coords)
+    sorted_z = z_coords[sorted_indices]
+    z_diffs = np.diff(sorted_z)
+    
+    # Find large gaps between consecutive atoms
+    large_gap_indices = np.where(z_diffs > gap_threshold)[0]
+    
+    # Create layer boundaries based on gap positions
+    layer_breaks = [0] + [gap_idx + 1 for gap_idx in large_gap_indices] + [len(sorted_z)]
+    
+    # Assign tags to each atom
+    tags = np.zeros(len(atoms), dtype=int)
+    for layer_idx in range(len(layer_breaks) - 1):
+        start_idx = layer_breaks[layer_idx]
+        end_idx = layer_breaks[layer_idx + 1]
+        
+        # Get z-coordinate range for this layer
+        z_min = sorted_z[start_idx]
+        z_max = sorted_z[end_idx - 1]
+        
+        # Assign tag to all atoms in this z-range
+        mask = (z_coords >= z_min) & (z_coords <= z_max)
+        tags[mask] = layer_idx
+    
     new_atoms.set_tags(tags)
-
     return new_atoms
 
 
-def fix_lower_surface(atoms):
+def fix_lower_surface(atoms, gap_threshold=1.0):
     """
     Fix the bottom half layers of the model.
     First, set tags based on z-coordinates, then fix atoms in the bottom half layers.
     
-    Example: For 3 layers, floor(3/2)=1, so the bottom 1 layer is fixed.
+    Example: For 4 layers, floor(4/2)=2, so the bottom 2 layers are fixed.
     
     Args:
         atoms: ASE atoms object
+        gap_threshold: Minimum gap size (Å) to separate layers (default: 1.0)
         
     Returns:
         ASE atoms object with bottom half fixed
@@ -88,12 +115,12 @@ def fix_lower_surface(atoms):
 
     atom_fix = atoms.copy()
 
-    # Set tags (layer numbers from bottom)
-    atom_fix = set_tags_by_z(atom_fix)
+    # Set tags (layer numbers from bottom) - using consistent gap_threshold
+    atom_fix = set_tags_by_z(atom_fix, gap_threshold=gap_threshold)
     tags = atom_fix.get_tags()
 
-    # Get total number of layers
-    num_layers = get_number_of_layers(atom_fix)
+    # Get total number of layers - using consistent gap_threshold
+    num_layers = get_number_of_layers(atom_fix, gap_threshold=gap_threshold)
     # Bottom half layer numbers (rounded down)
     lower_layers = list(range(num_layers // 2))
 
@@ -107,9 +134,9 @@ def fix_lower_surface(atoms):
     return atom_fix
 
 
-def parallel_displacement(atoms, vacuum=15.0):
+def parallel_displacement(atoms, vacuum=15.0, bottom_z=0.1): 
     """
-    Translate slab in z-direction so the lowest point becomes z=0,
+    Translate slab in z-direction so the lowest point becomes specified z-coordinate,
     and add specified vacuum layer (vacuum[Å]) to the top (positive z-direction).
     
     Note:
@@ -119,9 +146,10 @@ def parallel_displacement(atoms, vacuum=15.0):
     Args:
         atoms: ASE Atoms object (slab, preferably generated without vacuum option)
         vacuum: Thickness of vacuum layer to add (Å). Default is 15.0 Å.
+        bottom_z: Target z-coordinate for the lowest point (Å). Default is 0.1 Å.
     
     Returns:
-        New ASE Atoms object with atomic positions shifted to z=0 bottom alignment
+        New ASE Atoms object with atomic positions shifted to specified bottom alignment
         and cell z-axis length set to (slab height + vacuum).
     """
     # Create copy to avoid modifying original object
@@ -131,8 +159,8 @@ def parallel_displacement(atoms, vacuum=15.0):
     positions = slab.get_positions()
     z_min = positions[:, 2].min()
 
-    # Translate entire slab in z-direction so lowest point becomes z=0
-    slab.translate([0, 0, -z_min])
+    # Translate entire slab in z-direction so lowest point becomes bottom_z
+    slab.translate([0, 0, -z_min + bottom_z]) 
 
     # Get maximum z coordinate after translation
     z_max = slab.get_positions()[:, 2].max()
@@ -140,11 +168,9 @@ def parallel_displacement(atoms, vacuum=15.0):
     new_z_length = z_max + vacuum
 
     # Get cell matrix and set z-direction size to new length
-    # Here we assume the cell's third vector aligns with z-direction
     cell = slab.get_cell().copy()
-    # For safety, reset z-axis component to [0, 0, new_z_length]
     cell[2] = [0.0, 0.0, new_z_length]
-    slab.set_cell(cell, scale_atoms=False)  # scale_atoms=False updates only cell, not atomic coordinates
+    slab.set_cell(cell, scale_atoms=False)
 
     return slab
 
@@ -188,7 +214,7 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calculator: "vasp" / "mattersim" / "mace"- calculator type
+        calculator: "vasp" / "mace"/ "mace-d3" / "qe" - calculator type
         yaml_path: Path to YAML configuration file
         calc_directory: Calculation directory for VASP
 
@@ -323,8 +349,73 @@ def my_calculator(
         else:
             atoms = atoms
 
+    elif calculator == "qe":
+        from ase.calculators.espresso import Espresso, EspressoProfile
+        from ase.filters import ExpCellFilter
+        from ase.optimize import FIRE
+
+        # Load YAML file directly
+        try:
+            with open(yaml_path, 'r') as f:
+                qe_params = yaml.safe_load(f)
+        except FileNotFoundError:
+            print(f"Error: QE parameter file not found at {yaml_path}")
+            sys.exit(1)
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML file {yaml_path}: {e}")
+            sys.exit(1)
+
+        if kind not in qe_params['kinds']:
+            raise ValueError(f"Invalid kind '{kind}'. Must be one of {list(qe_params['kinds'].keys())}")
+
+        # Get parameters for this kind
+        common_params = qe_params['common'].copy()
+        kind_params = qe_params['kinds'][kind].copy()
+        
+        # Create EspressoProfile
+        profile = EspressoProfile(
+            command=common_params.get('command', 'mpirun -np 1 pw.x'),
+            pseudo_dir=common_params.get('pseudo_dir', '.')
+        )
+        
+        # Prepare input_data
+        input_data = {}
+        for section in ['control', 'system', 'electrons', 'ions']:
+            if section in common_params:
+                input_data[section] = common_params[section].copy()
+        
+        # Update with kind-specific parameters
+        for section in ['control', 'system', 'electrons', 'ions']:
+            if section in kind_params:
+                if section not in input_data:
+                    input_data[section] = {}
+                input_data[section].update(kind_params[section])
+        
+        # Set directory
+        if 'control' not in input_data:
+            input_data['control'] = {}
+        # Use only the kind name for prefix to avoid path issues
+        input_data['control']['prefix'] = kind
+        
+        # Get k-points
+        kpts = kind_params.get('kpts', [1, 1, 1])
+        if isinstance(kpts, list):
+            kpts = tuple(kpts)
+        
+        # Get pseudopotentials
+        pseudopotentials = common_params.get('pseudopotentials', {})
+        
+        # Create calculator
+        atoms.calc = Espresso(
+            profile=profile,
+            pseudopotentials=pseudopotentials,
+            kpts=kpts,
+            input_data=input_data,
+            directory=f'{calc_directory}/qe_{kind}_tmp'
+        )
+
     else:
-        raise ValueError("calculator must be 'vasp' or 'mace'")
+        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', or 'qe'")
 
     return atoms
 
@@ -349,10 +440,10 @@ def set_initial_magmoms(atoms, kind: str = "bulk", formula: str = None):
 
     # For gas phase closed-shell molecules, set all to 0
     if kind == "gas" and formula in CLOSED_SHELL_MOLECULES:
-        initial_magmom = [0.0] * len(symbols)
+        initial_magmom = [0.0001] * len(symbols)
     else:
         # Set 1.0 μB for magnetic elements, 0.0 for others
-        initial_magmom = [1.0 if symbol in MAGNETIC_ELEMENTS else 0.0 for symbol in symbols]
+        initial_magmom = [1.0 if symbol in MAGNETIC_ELEMENTS else 0.0001 for symbol in symbols]
 
     atoms.set_initial_magnetic_moments(initial_magmom)
     return atoms
