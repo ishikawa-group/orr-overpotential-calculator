@@ -219,7 +219,7 @@ def my_calculator(
         calc_directory: Calculation directory for VASP
 
     Returns:
-        atoms: Atoms object with calculator set (ExpCellFilter for bulk calculations)
+        atoms: Atoms object with calculator set (FrechetCellFilter for bulk calculations)
     """
     import yaml
     import sys
@@ -228,8 +228,8 @@ def my_calculator(
     calculator = calculator.lower()
 
     # optimizer options
-    fmax = 0.05
-    steps = 300
+    fmax = 0.03
+    steps = 500
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
@@ -266,7 +266,7 @@ def my_calculator(
 
     elif calculator == "mace":
         from mace.calculators import mace_mp
-        from ase.filters import ExpCellFilter
+        from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -295,20 +295,20 @@ def my_calculator(
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
-        if isinstance(atoms, ExpCellFilter):
+        if isinstance(atoms, FrechetCellFilter):
             atoms = atoms.atoms
         else:
             atoms = atoms
 
     elif calculator == "mace-d3":
         from mace.calculators import mace_mp
-        from ase.filters import ExpCellFilter
+        from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -338,20 +338,20 @@ def my_calculator(
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
-        if isinstance(atoms, ExpCellFilter):
+        if isinstance(atoms, FrechetCellFilter):
             atoms = atoms.atoms
         else:
             atoms = atoms
 
     elif calculator == "qe":
         from ase.calculators.espresso import Espresso, EspressoProfile
-        from ase.filters import ExpCellFilter
+        from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
         # Load YAML file directly
@@ -637,15 +637,15 @@ def create_orr_volcano_plot(
     # Constants
     T = 298.15  # K
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178
     zpe = {
-        "H2": 0.27, "H2O": 0.57,
+        "H2": 0.27, "H2O": 0.57, "O2": 0.10,
         "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
     }
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178
     entropy = {
-        "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+        "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15, "O2": 0.63 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
 
@@ -664,15 +664,15 @@ def create_orr_volcano_plot(
     df["dG_OH"] = df["dE_OH"] + delta_zpe_oh - delta_TS_oh
 
     # Calculate dG_O
-    # Reaction: H2O + * -> O* + H2
+    # Reaction: O + * -> O*
     # E_slab_O already includes solvent correction from compute_reaction_energies
     df["dE_O"] = df["E_slab_O"] - df["E_slab"] - (df["E_H2O_g"] - df["E_H2_g"])
 
     # ZPE difference for O reaction
-    delta_zpe_o = zpe["Oads"] - (zpe["H2O"] - zpe["H2"])  # eV
+    delta_zpe_o = zpe["Oads"] -  0.5 * zpe["O2"]  # eV
 
     # TΔS term (products - reactants) for O reaction
-    delta_TS_o = entropy["Oads"] - (entropy["H2O"] - entropy["H2"]) # eV
+    delta_TS_o = entropy["Oads"] - 0.5 * entropy["O2"]  # eV
 
     # ΔG_O
     df["dG_O"] = df["dE_O"] + delta_zpe_o - delta_TS_o

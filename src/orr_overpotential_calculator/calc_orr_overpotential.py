@@ -370,9 +370,9 @@ def compute_reaction_energies(
     }
 
     # Calculate reaction energies ΔE for 4-electron ORR pathway
-    dE1 = E_slab_OOH - (E_O2_gas + slab_energy + 0.5 * E_H2_gas)  # O2(g) + * + ½H2 → OOH*
-    dE2 = (E_slab_O + E_H2O_gas) - (E_slab_OOH + 0.5 * E_H2_gas)  # OOH* + ½H2 → O* + H2O
-    dE3 = E_slab_OH - (E_slab_O + 0.5 * E_H2_gas)  # O* + ½H2 → OH*
+    dE1 = E_slab_OOH - (E_O2_gas + slab_energy + 0.5 * E_H2_gas)    # O2(g) + * + ½H2 → OOH*
+    dE2 = (E_slab_O + E_H2O_gas) - (E_slab_OOH + 0.5 * E_H2_gas)    # OOH* + ½H2 → O* + H2O
+    dE3 = E_slab_OH - (E_slab_O + 0.5 * E_H2_gas)                   # O* + ½H2 → OH*
     dE4 = (slab_energy + E_H2O_gas) - (E_slab_OH + 0.5 * E_H2_gas)  # OH* + ½H2 → * + H2O
 
     reaction_energies = [dE1, dE2, dE3, dE4]
@@ -406,22 +406,18 @@ def get_overpotential_orr(
     reaction_count = 4  # 4-electron pathway
     assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178
     zpe = {
-        "H2": 0.27, "H2O": 0.57,
+        "H2": 0.27, "H2O": 0.57, "O2": 0.10,
         "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
     }
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178
     #
     entropy = {
-        "H2": 0.40 / temperature, "H2O": 0.67 / temperature,
+        "H2": 0.40 / temperature, "H2O": 0.67 / temperature, "O2": 0.63 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
-
-    # Calculate O2 corrections
-    zpe["O2"] = 0 + 2 * (zpe["H2O"] - zpe["H2"])
-    entropy["O2"] = 0 + 2 * (entropy["H2O"] - entropy["H2"])
 
     # Calculate ZPE and entropy corrections for each reaction step
     delta_zpe = np.array([
