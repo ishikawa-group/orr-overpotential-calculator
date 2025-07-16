@@ -406,33 +406,35 @@ def get_overpotential_orr(
     reaction_count = 4  # 4-electron pathway
     assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
-        "H2": 0.27, "H2O": 0.57, "O2": 0.10,
-        "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
+        "H2": 0.27, "H2O": 0.56,
+        "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
     }
+    # Calculate O2 ZPE from H2O and H2
+    zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178
-    #
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
-        "H2": 0.40 / temperature, "H2O": 0.67 / temperature, "O2": 0.63 / temperature,
+        "H2": 0.41 / temperature, "H2O": 0.67 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
+    # Calculate O2 entropy from H2O and H2
+    entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
 
     # Calculate ZPE and entropy corrections for each reaction step
     delta_zpe = np.array([
-        zpe["OOHads"] + (-0.5 * zpe["H2"] + -zpe["O2"]),
-        zpe["Oads"] + zpe["H2O"] - zpe["OOHads"] - 0.5 * zpe["H2"],
-        zpe["OHads"] - zpe["Oads"] - 0.5 * zpe["H2"],
-        zpe["H2O"] - zpe["OHads"] - 0.5 * zpe["H2"],
+        zpe["OOHads"] - (zpe["O2"] + 0 + 0.5 * zpe["H2"]),              # O2(g) + * + ½H2 → OOH*
+        (zpe["Oads"] + zpe["H2O"]) - (zpe["OOHads"] + 0.5 * zpe["H2"]), # OOH* + ½H2 → O* + H2O
+        zpe["OHads"] - (zpe["Oads"] + 0.5 * zpe["H2"]),                 # O* + ½H2 → OH*
+        (0 + zpe["H2O"]) - (zpe["OHads"] + 0.5 * zpe["H2"]),           # OH* + ½H2 → * + H2O
     ])
 
-    delta_ts = np.array([
-        temperature * entropy["OOHads"] + (-0.5 * temperature * entropy["H2"] + -temperature * entropy["O2"]),
-        temperature * entropy["Oads"] + temperature * entropy["H2O"] - temperature * entropy[
-            "OOHads"] - 0.5 * temperature * entropy["H2"],
-        temperature * entropy["OHads"] - temperature * entropy["Oads"] - 0.5 * temperature * entropy["H2"],
-        temperature * entropy["H2O"] - temperature * entropy["OHads"] - 0.5 * temperature * entropy["H2"],
+    delta_ts = temperature * np.array([
+        entropy["OOHads"] - (entropy["O2"] + 0 + 0.5 * entropy["H2"]),              # O2(g) + * + ½H2 → OOH*
+        (entropy["Oads"] + entropy["H2O"]) - (entropy["OOHads"] + 0.5 * entropy["H2"]), # OOH* + ½H2 → O* + H2O
+        entropy["OHads"] - (entropy["Oads"] + 0.5 * entropy["H2"]),                 # O* + ½H2 → OH*
+        (0 + entropy["H2O"]) - (entropy["OHads"] + 0.5 * entropy["H2"]),           # OH* + ½H2 → * + H2O
     ])
 
     # Calculate free energies
