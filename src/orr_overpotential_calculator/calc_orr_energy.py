@@ -46,7 +46,7 @@ SITES = ["ontop", "bridge", "fcc"]
 
 # Molecular geometries (all positions in Angstroms)
 MOLECULES = {
-    "OH":  Atoms("OH",  positions=[(0, 0, 0), (0, 0, 0.97)]),
+    "OH":  Atoms("OH",  positions=[(0, 0, 0), (0.686, 0.0, 0.686)]),
     "H2O": Atoms("OHH", positions=[(0, 0, 0), (0.759, 0, 0.588), (-0.759, 0, 0.588)]),
     "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),  
     "H2":  Atoms("HH",  positions=[(0, 0, 0), (0, 0, 0.74)]),

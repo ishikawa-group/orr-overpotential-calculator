@@ -47,7 +47,7 @@ np.set_printoptions(precision=3)
 # Molecular library (gas-phase includes all species, adsorbates are subset)
 MOLECULES: Dict[str, Atoms] = {
     # Adsorbates (gas + adsorption calculations)
-    "OH": Atoms("OH", positions=[(0, 0, 0), (0, 0, 0.97)]),
+    "OH": Atoms("OH", positions=[(0, 0, 0), (0.686, 0.0, 0.686)]),
     "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),
     "O": Atoms("O", positions=[(0, 0, 0)]),
     # Gas-phase only
@@ -591,7 +591,7 @@ def get_overpotential_orr(
 
 def calc_orr_overpotential(
         bulk: Atoms,
-        outdir: str = "result/matter_sim",
+        outdir: str = "result",
         overwrite: bool = False,
         log_level: str = "INFO",
         calculator: str = "mace",
