@@ -259,6 +259,14 @@ def my_calculator(
         if 'kpts' in params and isinstance(params['kpts'], list):
             params['kpts'] = tuple(params['kpts'])
 
+        # Auto-set dipol parameter for slab calculations
+        if kind == "slab":
+            # Calculate center of mass in scaled coordinates
+            center_of_mass_scaled = atoms.get_center_of_mass(scaled=True)
+            dipol_value = [0.5, 0.5, center_of_mass_scaled[2]]
+            params['dipol'] = dipol_value
+            print(f"Auto-set dipol parameter for slab: {dipol_value}")
+
         # Set calculator to atoms object and return
         atoms.calc = Vasp(**params)
         # Automatically set lmaxmix
