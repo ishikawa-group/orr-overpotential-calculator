@@ -228,7 +228,7 @@ def my_calculator(
     calculator = calculator.lower()
 
     # optimizer options
-    fmax = 0.03
+    fmax = 0.05
     steps = 500
 
     if calculator == "vasp":
@@ -446,11 +446,16 @@ def set_initial_magmoms(atoms, kind: str = "bulk", formula: str = None):
 
     symbols = atoms.get_chemical_symbols()
 
-    # For gas phase closed-shell molecules, set all to 0
-    if kind == "gas" and formula in CLOSED_SHELL_MOLECULES:
-        initial_magmom = [0.0001] * len(symbols)
+    # For gas phase molecules
+    if kind == "gas":
+        if formula in CLOSED_SHELL_MOLECULES:
+            # Closed-shell molecules: set all to 0.0001
+            initial_magmom = [0.0001] * len(symbols)
+        else:
+            # Other gas molecules: set all to 1.0
+            initial_magmom = [1.0] * len(symbols)
     else:
-        # Set 1.0 μB for magnetic elements, 0.0 for others
+        # For slab/bulk: Set 1.0 μB for magnetic elements, 0.0001 for others
         initial_magmom = [1.0 if symbol in MAGNETIC_ELEMENTS else 0.0001 for symbol in symbols]
 
     atoms.set_initial_magnetic_moments(initial_magmom)
