@@ -87,6 +87,7 @@ def calculate_required_molecules(
         calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
+        bulk_energy: float = None,
     ) -> Dict[str, Any]:
     """
     Calculate gas-phase and adsorption energies for all required molecules.
@@ -99,6 +100,7 @@ def calculate_required_molecules(
         calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
         vasp_yaml_path: Path to VASP configuration file
+        bulk_energy: Energy of the bulk structure optimization
         
     Returns:
         Dictionary containing all calculation results
@@ -179,6 +181,9 @@ def calculate_required_molecules(
             logger.info("  -> Best offset: %s   E_ads = %.3f eV", best_key, best_adsorption_energy)
 
     # 5. Save summary results
+    if bulk_energy is not None:
+        results["E_bulk"] = float(bulk_energy)
+    
     json.dump(
         convert_numpy_types(results),
         (outdir / "all_results.json").open("w"),
@@ -657,6 +662,7 @@ def calc_orr_overpotential(
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
         overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, vasp_yaml_path=vasp_yaml_path,
+        bulk_energy=bulk_energy,
     )
 
     # 4. Calculate reaction energies and overpotential
@@ -667,6 +673,7 @@ def calc_orr_overpotential(
     # 5. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary ---\n\n")
+        f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
         f.write(f"Overpotential η = {overpotential:.3f} V\n")
