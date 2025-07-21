@@ -286,7 +286,7 @@ def my_calculator(
                                   device=device)
 
         # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedMaceCalculator:
+        class ProtectedCalculator:
             def __init__(self, calculator):
                 self._calculator = calculator
 
@@ -299,7 +299,7 @@ def my_calculator(
                 return getattr(self._calculator, name)
 
         # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedMaceCalculator(mace_calculator)
+        atoms.calc = ProtectedCalculator(mace_calculator)
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
@@ -322,14 +322,14 @@ def my_calculator(
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
 
-        mace_calculator = mace_mp(model=url,
+        mace_d3_calculator = mace_mp(model=url,
                                   dispersion=True,
                                   dispersion_xc="pbe",
                                   default_dtype="float64",
                                   device=device)
 
         # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedMaceCalculator:
+        class ProtectedCalculator:
             def __init__(self, calculator):
                 self._calculator = calculator
 
@@ -342,11 +342,98 @@ def my_calculator(
                 return getattr(self._calculator, name)
 
         # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedMaceCalculator(mace_calculator)
+        atoms.calc = ProtectedCalculator(mace_d3_calculator)
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms)
+
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "orb-v3":
+        from orb_models.forcefield import pretrained
+        from orb_models.forcefield.calculator import ORBCalculator
+
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE, LBFGS
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        orb = pretrained.orb_v3_conservative_inf_omat(device=device, precision="float32-highest")
+
+        orb_calculator = ORBCalculator(orb, device=device)
+
+        # 設定変更を防ぐプロキシクラスを実装
+        class ProtectedCalculator:
+            def __init__(self, calculator):
+                self._calculator = calculator
+
+            def __getattr__(self, name):
+                if name == 'set':
+                    def protected_set(*args, **kwargs):
+                        return self  # 何も変更せずに自身を返す
+
+                    return protected_set
+                return getattr(self._calculator, name)
+
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedCalculator(orb_calculator)
+
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms)
+
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "fairchem":
+        from fairchem.core.calculate import pretrained_mlip                    
+        from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
+        from fairchem.core.units.mlip_unit.api.inference import InferenceSettings  
+
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE, LBFGS
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
+
+        fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
+
+        # 設定変更を防ぐプロキシクラスを実装
+        class ProtectedCalculator:
+            def __init__(self, calculator):
+                self._calculator = calculator
+
+            def __getattr__(self, name):
+                if name == 'set':
+                    def protected_set(*args, **kwargs):
+                        return self  # 何も変更せずに自身を返す
+
+                    return protected_set
+                return getattr(self._calculator, name)
+
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms)
+
+        # delete PBC for gas phase calculations
+        if kind == "gas":
+            atoms.set_pbc(False)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
@@ -642,6 +729,9 @@ def create_orr_volcano_plot(
 
     # Load CSV file
     df = pd.read_csv(csv_file)
+    
+    # Sort dataframe by Material column for alphabetical order
+    df = df.sort_values(by=label_column).reset_index(drop=True)
 
     # Note: Solvent corrections are already applied in compute_reaction_energies
     # when generating the CSV file, so we don't apply them again here to avoid double correction.
@@ -815,31 +905,111 @@ def create_orr_volcano_plot(
     return str(output_path)
 
 
-def create_dg_o_vs_dg_oh_plot(
-        df,
-        output_file: str,
+def create_trend_plot(
+        csv_file: Union[str, Path],
+        output_file: str = "trend_plot.png",
+        energy_type: str = "G",  # "E" or "G"
+        x_label: str = "OH",  # "O", "OH", or "OOH"
+        y_label: str = "OOH",  # "O", "OH", or "OOH"
         label_column: str = "Material",
         dpi: int = 300,
-        figsize: tuple = (10, 8),
+        figsize: tuple = (10, 10),
         markersize: int = 80,
+        linear_regression: bool = False,  # Show linear regression line
     ) -> str:
     """
-    Generate dG_O vs dG_OH correlation plot with linear regression
+    Generate correlation plot between two adsorption energies with optional linear regression
     
     Args:
-        df: DataFrame containing dG_O and dG_OH data
+        csv_file: Input CSV file path
         output_file: Output image filename
+        energy_type: "E" (electronic energy) or "G" (free energy with ZPE and TS corrections)
+        x_label: X-axis adsorbate ("O", "OH", or "OOH")
+        y_label: Y-axis adsorbate ("O", "OH", or "OOH")
         label_column: Column name for legend
         dpi: Image resolution
         figsize: Figure size (width, height) in inches
         markersize: Marker size
+        linear_regression: Whether to show linear regression line and equation
         
     Returns:
-        Tuple of (path of saved image, slope, intercept, r2_score)
+        Tuple of (path of saved image, slope, intercept, r2_score) or path only if linear_regression=False
     """
+    import pandas as pd
     import matplotlib.pyplot as plt
+    import numpy as np
     from sklearn.linear_model import LinearRegression
     from sklearn.metrics import r2_score
+    from pathlib import Path
+    
+    # Validate inputs
+    if energy_type not in ["E", "G"]:
+        raise ValueError("energy_type must be 'E' or 'G'")
+    if x_label not in ["O", "OH", "OOH"]:
+        raise ValueError("x_label must be 'O', 'OH', or 'OOH'")
+    if y_label not in ["O", "OH", "OOH"]:
+        raise ValueError("y_label must be 'O', 'OH', or 'OOH'")
+    
+    # Load CSV file
+    df = pd.read_csv(csv_file)
+    
+    # Sort dataframe by Material column for alphabetical order
+    df = df.sort_values(by=label_column).reset_index(drop=True)
+    
+    # Constants for G calculations
+    if energy_type == "G":
+        T = 298.15  # K
+
+        # Zero-point energy corrections (eV)
+        zpe = {
+            "H2": 0.27, "H2O": 0.56,
+            "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
+        }
+        zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
+
+        # Entropy terms T*S (eV)
+        entropy = {
+            "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+            "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
+        }
+        entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
+    
+    # Calculate energy differences
+    def calculate_energy(adsorbate):
+        if adsorbate == "OH":
+            # Reaction: H2O + * -> OH* + 1/2 H2
+            dE = df[f"E_slab_{adsorbate}"] - df["E_slab"] - (df["E_H2O_g"] - 0.5 * df["E_H2_g"])
+            if energy_type == "G":
+                delta_zpe = zpe["OHads"] - (zpe["H2O"] - 0.5 * zpe["H2"])
+                delta_TS = entropy["OHads"] - (entropy["H2O"] - 0.5 * entropy["H2"])
+                return dE + delta_zpe - delta_TS
+            return dE
+        elif adsorbate == "O":
+            # Reaction: H2O + * -> O* + H2
+            dE = df[f"E_slab_{adsorbate}"] - df["E_slab"] - (df["E_H2O_g"] - df["E_H2_g"])
+            if energy_type == "G":
+                delta_zpe = zpe["Oads"] - 0.5 * zpe["O2"]
+                delta_TS = entropy["Oads"] - 0.5 * entropy["O2"]
+                return dE + delta_zpe - delta_TS
+            return dE
+        elif adsorbate == "OOH":
+            # Reaction: 2H2O + * -> OOH* + 1.5 H2
+            dE = df[f"E_slab_{adsorbate}"] - df["E_slab"] - (2*df["E_H2O_g"] - 1.5 * df["E_H2_g"])
+            if energy_type == "G":
+                delta_zpe = zpe["OOHads"] - (2*zpe["H2O"] - 1.5 * zpe["H2"])
+                delta_TS = entropy["OOHads"] - (2*entropy["H2O"] - 1.5 * entropy["H2"])
+                return dE + delta_zpe - delta_TS
+            return dE
+    
+    # Calculate x and y values
+    x_values = calculate_energy(x_label)
+    y_values = calculate_energy(y_label)
+    
+    # Set column names for dataframe
+    x_col = f"d{energy_type}_{x_label}"
+    y_col = f"d{energy_type}_{y_label}"
+    df[x_col] = x_values
+    df[y_col] = y_values
     
     # Set font size
     plt.rcParams.update({'font.size': 12})
@@ -856,8 +1026,8 @@ def create_dg_o_vs_dg_oh_plot(
     
     for i, (_, row) in enumerate(df.iterrows()):
         ax.scatter(
-            row["dG_O"],
-            row["dG_OH"],
+            row[x_col],
+            row[y_col],
             color=colors[i],
             s=markersize,
             alpha=0.8,
@@ -869,48 +1039,58 @@ def create_dg_o_vs_dg_oh_plot(
     for i, (_, row) in enumerate(df.iterrows()):
         ax.annotate(
             row[label_column],
-            (row["dG_O"], row["dG_OH"]),
+            (row[x_col], row[y_col]),
             xytext=(5, 5),
             textcoords='offset points',
             fontsize=10,
             fontweight='bold'
         )
     
-    # Perform linear regression
-    X = df[["dG_O"]].values
-    y = df["dG_OH"].values
+    # Initialize return values
+    slope, intercept, r2 = None, None, None
     
-    model = LinearRegression()
-    model.fit(X, y)
+    # Perform linear regression if requested
+    if linear_regression:
+        X = df[[x_col]].values
+        y = df[y_col].values
+        
+        model = LinearRegression()
+        model.fit(X, y)
+        
+        # Calculate R²
+        y_pred = model.predict(X)
+        r2 = r2_score(y, y_pred)
+        
+        # Get regression parameters
+        slope = model.coef_[0]
+        intercept = model.intercept_
+        
+        # Plot regression line
+        x_range = np.linspace(df[x_col].min() - 0.5, df[x_col].max() + 0.5, 100)
+        y_range = model.predict(x_range.reshape(-1, 1))
+        ax.plot(x_range, y_range, 'r-', linewidth=2, alpha=0.8, label='Linear fit')
+        
+        # Add equation and R² to the plot
+        equation_text = f'd{energy_type}_{y_label} = {slope:.3f} × d{energy_type}_{x_label} + {intercept:.3f}\nR² = {r2:.3f}'
+        
+        # Position the text box in upper left corner
+        ax.text(0.05, 0.95, equation_text, 
+                transform=ax.transAxes, 
+                fontsize=12, 
+                fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+                verticalalignment='top')
     
-    # Calculate R²
-    y_pred = model.predict(X)
-    r2 = r2_score(y, y_pred)
-    
-    # Get regression parameters
-    slope = model.coef_[0]
-    intercept = model.intercept_
-    
-    # Plot regression line
-    x_range = np.linspace(df["dG_O"].min() - 0.5, df["dG_O"].max() + 0.5, 100)
-    y_range = model.predict(x_range.reshape(-1, 1))
-    ax.plot(x_range, y_range, 'r-', linewidth=2, alpha=0.8, label='Linear fit')
-    
-    # Add equation and R² to the plot
-    equation_text = f'dG_OH = {slope:.3f} × dG_O + {intercept:.3f}\nR² = {r2:.3f}'
-    
-    # Position the text box in upper left corner
-    ax.text(0.05, 0.95, equation_text, 
-            transform=ax.transAxes, 
-            fontsize=12, 
-            fontweight='bold',
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
-            verticalalignment='top')
+    # Set axis limits based on data range ± 0.5
+    x_min, x_max = df[x_col].min(), df[x_col].max()
+    y_min, y_max = df[y_col].min(), df[y_col].max()
+    ax.set_xlim(x_min - 0.5, x_max + 0.5)
+    ax.set_ylim(y_min - 0.5, y_max + 0.5)
     
     # Set axis labels and title
-    ax.set_xlabel('dG_O (eV)', fontsize=14, fontweight='bold')
-    ax.set_ylabel('dG_OH (eV)', fontsize=14, fontweight='bold')
-    ax.set_title('dG_O vs dG_OH Correlation', fontsize=16, fontweight='bold')
+    ax.set_xlabel(f'd{energy_type}_{x_label} (eV)', fontsize=14, fontweight='bold')
+    ax.set_ylabel(f'd{energy_type}_{y_label} (eV)', fontsize=14, fontweight='bold')
+    ax.set_title(f'd{energy_type}_{x_label} vs d{energy_type}_{y_label} Correlation', fontsize=16, fontweight='bold')
     ax.grid(True, linestyle='--', alpha=0.6)
     
     # Material legend
@@ -922,12 +1102,13 @@ def create_dg_o_vs_dg_oh_plot(
                         frameon=True)
     ax.add_artist(legend1)
     
-    # Regression line legend
-    handles2 = [plt.Line2D([0], [0], color='red', linewidth=2)]
-    labels2 = ['Linear fit']
-    legend2 = ax.legend(handles2, labels2,
-                        loc='upper right',
-                        frameon=True)
+    # Regression line legend (only if linear regression is enabled)
+    if linear_regression:
+        handles2 = [plt.Line2D([0], [0], color='red', linewidth=2)]
+        labels2 = ['Linear fit']
+        legend2 = ax.legend(handles2, labels2,
+                            loc='upper right',
+                            frameon=True)
     
     # Adjust graph layout
     plt.tight_layout()
@@ -937,8 +1118,13 @@ def create_dg_o_vs_dg_oh_plot(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
     
-    print(f"dG_O vs dG_OH plot saved: {output_path}")
-    return str(output_path), slope, intercept, r2
+    print(f"Trend plot saved: {output_path}")
+    
+    # Return different formats based on linear_regression flag
+    if linear_regression:
+        return str(output_path), slope, intercept, r2
+    else:
+        return str(output_path)
 
 
 def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):
