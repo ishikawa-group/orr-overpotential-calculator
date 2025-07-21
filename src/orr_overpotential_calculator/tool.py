@@ -175,6 +175,20 @@ def parallel_displacement(atoms, vacuum=15.0, bottom_z=0.1):
     return slab
 
 
+class ProtectedCalculator:
+    """Proxy class to protect calculator from settings changes"""
+    def __init__(self, calculator):
+        self._calculator = calculator
+
+    def __getattr__(self, name):
+        if name == 'set':
+            def protected_set(*args, **kwargs):
+                return self
+
+            return protected_set
+        return getattr(self._calculator, name)
+
+
 def auto_lmaxmix(atoms):
     """Automatically set lmaxmix when d/f elements are present"""
     d_elements = {
@@ -214,7 +228,7 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calculator: "vasp" / "mace"/ "mace-d3" / "qe" - calculator type
+        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "fairchem" / "qe" - calculator type
         yaml_path: Path to YAML configuration file
         calc_directory: Calculation directory for VASP
 
@@ -285,19 +299,6 @@ def my_calculator(
                                   default_dtype="float64",
                                   device=device)
 
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
         # 保護されたカリキュレータをセット
         atoms.calc = ProtectedCalculator(mace_calculator)
 
@@ -328,19 +329,6 @@ def my_calculator(
                                   default_dtype="float64",
                                   device=device)
 
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
         # 保護されたカリキュレータをセット
         atoms.calc = ProtectedCalculator(mace_d3_calculator)
 
@@ -369,21 +357,34 @@ def my_calculator(
 
         orb_calculator = ORBCalculator(orb, device=device)
 
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
         # 保護されたカリキュレータをセット
         atoms.calc = ProtectedCalculator(orb_calculator)
+
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms)
+
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "7net":
+        from sevenn.calculator import SevenNetCalculator
+
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE, LBFGS
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        sevenn_calculator = SevenNetCalculator('7net-mf-ompa', modal='mpa', enable_cueq=True)
+
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedCalculator(sevenn_calculator)
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
@@ -404,40 +405,40 @@ def my_calculator(
         from fairchem.core.units.mlip_unit.api.inference import InferenceSettings  
 
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE, LBFGS
+        from ase.optimize import FIRE, FIRE2, LBFGS, LBFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
 
-        fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
-
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
-        # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedCalculator(fairchem_calculator)
-
-        # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = FrechetCellFilter(atoms)
+            # Bulk optimization step 1: Use "omat" task
+            fairchem_bulk_calculator = FAIRChemCalculator(predictor, task_name="omat")
+            atoms.calc = ProtectedCalculator(fairchem_bulk_calculator)
+            
+            filtered_atoms = FrechetCellFilter(atoms)
+            optimizer1 = LBFGSLineSearch(filtered_atoms)
+            optimizer1.run(fmax=fmax, steps=steps)
+            atoms = filtered_atoms.atoms # Get the optimized atoms
 
-        # delete PBC for gas phase calculations
-        if kind == "gas":
-            atoms.set_pbc(False)
+            # Bulk optimization step 2: Use "oc20" task
+            fairchem_oc20_calculator = FAIRChemCalculator(predictor, task_name="oc20")
+            atoms.calc = ProtectedCalculator(fairchem_oc20_calculator)
 
-        # Perform structure optimization
-        optimizer = FIRE(atoms)
-        optimizer.run(fmax=fmax, steps=steps)
+            filtered_atoms = FrechetCellFilter(atoms)
+            optimizer2 = LBFGSLineSearch(filtered_atoms)
+            optimizer2.run(fmax=fmax, steps=steps)
+
+        else: # For "slab" and "gas"
+            fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
+            atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+            # delete PBC for gas phase calculations
+            if kind == "gas":
+                atoms.set_pbc(False)
+
+            # Perform structure optimization
+            optimizer = LBFGSLineSearch(atoms)
+            optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
             atoms = atoms.atoms
@@ -510,7 +511,7 @@ def my_calculator(
         )
 
     else:
-        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', or 'qe'")
+        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'orb-v3', '7net', 'fairchem', or 'qe'")
 
     return atoms
 
