@@ -243,7 +243,7 @@ def my_calculator(
 
     # optimizer options
     fmax = 0.05
-    steps = 500
+    steps = 200
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
@@ -411,21 +411,20 @@ def my_calculator(
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
 
         if kind == "bulk":
-            # Bulk optimization step 1: Use "omat" task
+            # Cell optimization step 1: Use "omat" task
             fairchem_bulk_calculator = FAIRChemCalculator(predictor, task_name="omat")
             atoms.calc = ProtectedCalculator(fairchem_bulk_calculator)
             
-            filtered_atoms = FrechetCellFilter(atoms)
-            optimizer1 = LBFGSLineSearch(filtered_atoms)
+            atoms = FrechetCellFilter(atoms)
+            optimizer1 = LBFGSLineSearch(atoms)
             optimizer1.run(fmax=fmax, steps=steps)
-            atoms = filtered_atoms.atoms # Get the optimized atoms
+            atoms = atoms.atoms # Get the optimized atoms
 
             # Bulk optimization step 2: Use "oc20" task
             fairchem_oc20_calculator = FAIRChemCalculator(predictor, task_name="oc20")
             atoms.calc = ProtectedCalculator(fairchem_oc20_calculator)
 
-            filtered_atoms = FrechetCellFilter(atoms)
-            optimizer2 = LBFGSLineSearch(filtered_atoms)
+            optimizer2 = LBFGSLineSearch(atoms)
             optimizer2.run(fmax=fmax, steps=steps)
 
         else: # For "slab" and "gas"
