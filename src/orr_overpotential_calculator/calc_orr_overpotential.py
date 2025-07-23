@@ -670,6 +670,9 @@ def calc_orr_overpotential(
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
     overpotential = orr_results["eta"]
 
+    # Add E_bulk to orr_results for external access
+    orr_results["E_bulk"] = float(bulk_energy)
+
     # 5. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary ---\n\n")
@@ -764,6 +767,9 @@ def calc_cluster_orr_overpotential(
     # 3. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, cluster_energy, solvent_correction_yaml_path)
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
+
+    # Add cluster energy as E_bulk for consistency
+    orr_results["E_bulk"] = float(cluster_energy)
 
     # 4. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
@@ -909,6 +915,7 @@ def calc_orr_overpotential_modified(
     orr_results.update({
         "modifier": modifier_name,
         "modifier_offset": modifier_offset,
+        "E_bulk": float(bulk_energy),  # Add bulk energy for consistency
     })
 
     return orr_results
