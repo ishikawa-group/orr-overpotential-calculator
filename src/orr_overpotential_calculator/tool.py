@@ -3,6 +3,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 import os
+import warnings
+
+# Suppress scipy warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
 
 
 def convert_numpy_types(obj):
@@ -304,7 +308,7 @@ def my_calculator(
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = FrechetCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
@@ -334,7 +338,7 @@ def my_calculator(
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = FrechetCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
@@ -362,7 +366,7 @@ def my_calculator(
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = FrechetCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
@@ -388,7 +392,7 @@ def my_calculator(
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = FrechetCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
@@ -405,29 +409,25 @@ def my_calculator(
         from fairchem.core.units.mlip_unit.api.inference import InferenceSettings  
 
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE, FIRE2, LBFGS, LBFGSLineSearch
+        from ase.optimize import FIRE, FIRE2, LBFGS, BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
 
         if kind == "bulk":
-            # Cell optimization step 1: Use "omat" task
+            # Bulk optimization step: Use "omat" task
             fairchem_bulk_calculator = FAIRChemCalculator(predictor, task_name="omat")
             atoms.calc = ProtectedCalculator(fairchem_bulk_calculator)
             
-            atoms = FrechetCellFilter(atoms)
-            optimizer1 = LBFGSLineSearch(atoms)
-            optimizer1.run(fmax=fmax, steps=steps)
-            atoms = atoms.atoms # Get the optimized atoms
+            # Apply FrechetCellFilter
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+            optimizer = BFGSLineSearch(atoms)
+            optimizer.run(fmax=fmax, steps=steps)
+            
+            # Extract atoms from filter
+            atoms = atoms.atoms 
 
-            # Bulk optimization step 2: Use "oc20" task
-            fairchem_oc20_calculator = FAIRChemCalculator(predictor, task_name="oc20")
-            atoms.calc = ProtectedCalculator(fairchem_oc20_calculator)
-
-            optimizer2 = LBFGSLineSearch(atoms)
-            optimizer2.run(fmax=fmax, steps=steps)
-
-        else: # For "slab" and "gas"
+        else: # For "slab" and "gas" optimization step: Use "oc20" task
             fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
             atoms.calc = ProtectedCalculator(fairchem_calculator)
 
@@ -436,13 +436,8 @@ def my_calculator(
                 atoms.set_pbc(False)
 
             # Perform structure optimization
-            optimizer = LBFGSLineSearch(atoms)
+            optimizer = BFGSLineSearch(atoms)
             optimizer.run(fmax=fmax, steps=steps)
-
-        if isinstance(atoms, FrechetCellFilter):
-            atoms = atoms.atoms
-        else:
-            atoms = atoms
 
     elif calculator == "qe":
         from ase.calculators.espresso import Espresso, EspressoProfile
@@ -823,9 +818,15 @@ def create_orr_volcano_plot(
     if x_column == "dG_O":
         ax.set_xlim(-0.5, 3.5)
         ax.set_ylim(-0.5, 1.5)
+        # Set tick marks every 0.5
+        ax.set_xticks(np.arange(-0.5, 4.0, 0.5))
+        ax.set_yticks(np.arange(-0.5, 2.0, 0.5))
     else:  # dG_OH
         ax.set_xlim(-0.4, 1.6)
         ax.set_ylim(-0.5, 1.5)
+        # Set tick marks every 0.5
+        ax.set_xticks(np.arange(-0.5, 2.0, 0.5))
+        ax.set_yticks(np.arange(-0.5, 2.0, 0.5))
 
     # Add theoretical lines
     # Ideal limiting potential (1.23V) horizontal line
@@ -870,7 +871,8 @@ def create_orr_volcano_plot(
     ax.set_xlabel(f'{x_column} (eV)', fontsize=14, fontweight='bold')
     ax.set_ylabel(f'{y_column} (V)', fontsize=14, fontweight='bold')
     ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
-    ax.grid(True, linestyle='--', alpha=0.6)
+    # Remove grid (グリッドを削除)
+    # ax.grid(True, linestyle='--', alpha=0.6)
 
     # Material legend
     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i],
