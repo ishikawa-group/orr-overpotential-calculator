@@ -55,9 +55,6 @@ MOLECULES = {
     "O":   Atoms("O",   positions=[(0, 0, 0)])
     }
 
-# Closed-shell molecules list for spin calculations
-CLOSED_SHELL_MOLECULES = ["H2", "H2O"]
-
 # Structural parameters (all in Angstroms)
 SLAB_VACUUM = 15.0      # Vacuum layer thickness for slab calculations
 GAS_BOX = 15.0          # Box size for gas phase calculations
@@ -103,12 +100,6 @@ def optimize_gas_molecule(
         yaml_path=yaml_path, 
         calc_directory=work_directory
     )
-    
-    # For closed-shell molecules, set spin-unpolarized calculation
-    if molecule_name in CLOSED_SHELL_MOLECULES:
-        calculator = optimized_molecule.calc
-        calculator.set(ispin=1)
-        optimized_molecule.calc = calculator
     
     energy = optimized_molecule.get_potential_energy()
     return optimized_molecule, energy
