@@ -4,6 +4,7 @@ import numpy as np
 import yaml
 import os
 import warnings
+from ase.calculators.calculator import Calculator
 
 # Suppress scipy warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
@@ -193,6 +194,49 @@ class ProtectedCalculator:
         return getattr(self._calculator, name)
 
 
+class AtomReferenceCalculator(Calculator):
+    implemented_properties = ["energy", "free_energy", "forces", "stress"]
+
+    def __init__(self, energy: float, natoms: int):
+        super().__init__()
+        self._energy = energy
+        self._natoms = natoms
+
+    def calculate(self, atoms=None, properties=None, system_changes=None):
+        super().calculate(atoms, properties, system_changes)
+        self.results = {
+            "energy": self._energy,
+            "free_energy": self._energy,
+            "forces": np.zeros((self._natoms, 3)),
+            "stress": np.zeros(6),
+        }
+
+
+def _lookup_atom_reference(atom_refs, task_name, atomic_number, charge=0):
+    """Resolve atomic reference energy for given task"""
+    from omegaconf import OmegaConf
+
+    refs = atom_refs.get(task_name)
+    if refs is None:
+        return None
+
+    refs = OmegaConf.to_container(refs, resolve=True)
+
+    if isinstance(refs, (list, tuple)):
+        if atomic_number < len(refs):
+            value = refs[atomic_number]
+        else:
+            return None
+    elif isinstance(refs, dict):
+        value = refs.get(atomic_number)
+    else:
+        return None
+
+    if isinstance(value, dict):
+        return value.get(charge, value.get(0))
+    return value
+
+
 def auto_lmaxmix(atoms):
     """Automatically set lmaxmix when d/f elements are present"""
     d_elements = {
@@ -319,6 +363,124 @@ def my_calculator(
         else:
             atoms = atoms
 
+    elif calculator == "mace-mh":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=False,
+            default_dtype="float64",
+            device=device,
+            head="omat_pbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh-d3":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=True,
+            dispersion_xc="pbe",
+            default_dtype="float64",
+            device=device,
+            head="omat_pbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh-oc20":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=False,
+            default_dtype="float64",
+            device=device,
+            head="oc20_usemppbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh-oc20-d3":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=True,
+            dispersion_xc="pbe",
+            default_dtype="float64",
+            device=device,
+            head="oc20_usemppbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
     elif calculator == "mace-d3":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
@@ -403,7 +565,7 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calculator == "fairchem":
+    elif calculator == "uma-s" or calculator == "fairchem":
         from fairchem.core.calculate import pretrained_mlip                    
         from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
         from fairchem.core.units.mlip_unit.api.inference import InferenceSettings  
@@ -438,6 +600,34 @@ def my_calculator(
             # Perform structure optimization
             optimizer = BFGSLineSearch(atoms)
             optimizer.run(fmax=fmax, steps=steps)
+
+    elif calculator == "esen-oc25":
+        from fairchem.core import pretrained_mlip, FAIRChemCalculator
+        from ase.optimize import BFGSLineSearch
+        from omegaconf import OmegaConf
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        predictor = pretrained_mlip.get_predict_unit("esen-sm-conserving-all-oc25", device=device)
+        fairchem_calculator = FAIRChemCalculator(predictor)
+
+        if len(atoms) == 1:
+            task_name = fairchem_calculator.task_name
+            atomic_number = int(atoms.get_atomic_numbers()[0])
+            charge = atoms.info.get("charge", 0)
+
+            energy = _lookup_atom_reference(
+                predictor.atom_refs, task_name, atomic_number, charge=charge
+            )
+            if energy is None:
+                raise ValueError(f"No atomic reference energy found for Z={atomic_number} in task '{task_name}'.")
+
+            atoms.calc = AtomReferenceCalculator(energy, len(atoms))
+            return atoms
+
+        atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+        optimizer = BFGSLineSearch(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
 
     elif calculator == "qe":
         from ase.calculators.espresso import Espresso, EspressoProfile
@@ -505,7 +695,7 @@ def my_calculator(
         )
 
     else:
-        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'orb-v3', '7net', 'fairchem', or 'qe'")
+        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', 'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-s', 'fairchem', or 'qe'")
 
     return atoms
 
