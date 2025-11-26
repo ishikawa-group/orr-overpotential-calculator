@@ -1,28 +1,28 @@
-# ORR Overpotential Calculation and Volcano Plot Generation Guide
+# OER Overpotential Calculation and Volcano Plot Generation Guide
 
-This directory demonstrates how to calculate Oxygen Reduction Reaction (ORR) overpotentials and create volcano plots.
+This directory demonstrates how to calculate Oxygen Evolution Reaction (OER) overpotentials and create volcano plots.
 
 ## Overview
 
-The Oxygen Reduction Reaction (ORR) is a crucial reaction in fuel cells. We consider the following 4-step reaction pathway on catalyst surfaces:
+The Oxygen Evolution Reaction (OER) is a crucial reaction in electrolyzers. We consider the following 4-step pathway (oxidation direction):
 
-1. `O₂(g) + * + ½H₂ → OOH*`
-2. `OOH* + ½H₂ → O* + H₂O`
-3. `O* + ½H₂ → OH*`
-4. `OH* + ½H₂ → * + H₂O`
+1. `* + H₂O → OH* + ½H₂`
+2. `OH* → O* + ½H₂`
+3. `O* + H₂O → OOH* + ½H₂`
+4. `OOH* → O₂ + * + ½H₂`
 
 The overpotential η is determined by the most unfavorable reaction step.
 
 ## Calculation Procedure
 
-### 1. Single Material ORR Overpotential Calculation
+### 1. Single Material OER Overpotential Calculation
 
 ````python
 
 #!/usr/bin/env python3
 from pathlib import Path
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from oer_overpotential_calculator import calc_oer_overpotential
 
 # Parameter settings
 base_dir = str(Path(__file__).parent / "Pt111")
@@ -34,20 +34,20 @@ yaml_path = str(Path(__file__).parent / "vasp.yaml")
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
 # Define adsorption sites
-orr_adsorbates = {
+oer_adsorbates = {
     "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)], # ontop, bridge, fcc, hcp
     "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
     "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
 }
 
-# Execute ORR overpotential calculation
-result = calc_orr_overpotential(
+# Execute OER overpotential calculation
+result = calc_oer_overpotential(
     bulk=bulk,
     base_dir=base_dir,
     force=force,
     log_level="INFO",
     calc_type=calc_type,
-    adsorbates=orr_adsorbates,
+    adsorbates=oer_adsorbates,
     yaml_path=yaml_path
 )
 
@@ -56,7 +56,7 @@ eta = result["eta"]
 diffG_U0 = result["diffG_U0"]
 diffG_eq = result["diffG_eq"]
 
-print(f"ORR overpotential: {eta:.3f} V")
+print(f"OER overpotential: {eta:.3f} V")
 print(f"Reaction Free Energy Change at U=0V: {diffG_U0}")
 print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
 
@@ -66,7 +66,7 @@ print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
 
 ````python
 
-from orr_overpotential_calculator import generate_result_csv, create_orr_volcano_plot
+from oer_overpotential_calculator import generate_result_csv, create_oer_volcano_plot
 from pathlib import Path
 
 script_dir = Path(__file__).parent
@@ -81,15 +81,15 @@ materials = {
 }
 
 # Output file paths
-output_csv_path = script_dir / "orr_result.csv"
-output_png_path = script_dir / "orr_volcano_plot.png"
+output_csv_path = script_dir / "oer_result.csv"
+output_png_path = script_dir / "oer_volcano_plot.png"
 
 # 1. Generate CSV file
 generate_result_csv(materials, str(output_csv_path), verbose=True)
 print(f"CSV file created: {output_csv_path}")
 
 # 2. Create Volcano Plot
-create_orr_volcano_plot(output_csv_path, output_png_path)
+create_oer_volcano_plot(output_csv_path, output_png_path)
 print(f"Volcano Plot created: {output_png_path}")
 
 ````
@@ -119,13 +119,13 @@ For each molecule (OH*, O*, OOH*):
 | File | Description |
 |------|-------------|
 | `all_results.json` | Integrated data from all calculations |
-| `orr_result.csv` | Comparative data for multiple materials |
-| `ORR_free_energy_diagram.png` | Free energy diagram |
-| `orr_volcano_plot.png` | Volcano plot |
+| `oer_result.csv` | Comparative data for multiple materials |
+| `OER_free_energy_diagram.png` | Free energy diagram |
+| `oer_volcano_plot.png` | Volcano plot |
 
 ## Generated Volcano Plot Example
 
-<img src="result/orr_volcano_plot.png" width="80%">
+<img src="result/oer_volcano_plot.png" width="80%">
 
 ## Adsorption Site Definitions
 
@@ -164,6 +164,4 @@ Adsorption sites are specified using fractional coordinates:
 ## References
 
 1. Nørskov, J. K. et al. (2004). Origin of the Overpotential for Oxygen Reduction at a Fuel-Cell Cathode. *J. Phys. Chem. B*, 108, 17886-17892.
-2. Zhang, Q. & Asthagiri, A. (2019). Solvation effects on DFT predictions of ORR activity on metal surfaces. *Catal. Today*, 323, 35-43.
-
-
+2. Zhang, Q. & Asthagiri, A. (2019). Solvation effects on DFT predictions of OER activity on metal surfaces. *Catal. Today*, 323, 35-43.

@@ -1,4 +1,4 @@
-from orr_overpotential_calculator import generate_result_csv, create_orr_volcano_plot
+from oer_overpotential_calculator import generate_result_csv, create_oer_volcano_plot
 from pathlib import Path
 
 
@@ -19,13 +19,13 @@ if __name__ == "__main__":
     }
     
     # 出力ファイルのパスをスクリプトと同じディレクトリに指定
-    output_csv_path = script_dir / "result/orr_result.csv"
-    output_png_path = script_dir / "result/orr_volcano_plot.png"
+    output_csv_path = script_dir / "result/oer_result.csv"
+    output_png_path = script_dir / "result/oer_volcano_plot.png"
     
     # CSVファイルを生成
     solvent_correction_yaml_path = str(script_dir / "solvent_correction.yaml")
     output_file = generate_result_csv(materials, str(output_csv_path), verbose=True, 
                                      solvent_correction_yaml_path=solvent_correction_yaml_path)
 
-    create_orr_volcano_plot(output_csv_path, output_png_path, 
+    create_oer_volcano_plot(output_csv_path, output_png_path, 
                            solvent_correction_yaml_path=solvent_correction_yaml_path)

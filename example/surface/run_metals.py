@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from oer_overpotential_calculator import calc_oer_overpotential
 
 metals = ["Ni"]
 # metals = ["Ni", "Cu", "Rh", "Pd", "Ag", "Ir", "Pt", "Au"]
@@ -26,19 +26,19 @@ for metal in metals:
     outdir.mkdir(parents=True, exist_ok=True)
 
     bulk = fcc111(metal, size=(3, 3, 4), a=lattice_constants[metal], vacuum=None, periodic=True)
-    orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
+    oer_adsorbates: Dict[str, List[Tuple[float, float]]] = {
         "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],  # ontop, bridge, fcc, hcp
         "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
         "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
     }
 
-    result = calc_orr_overpotential(
+    result = calc_oer_overpotential(
         bulk=bulk,
         outdir=outdir,
         overwrite=overwrite,
         log_level=log_level,
         calculator=calculator,
-        adsorbates=orr_adsorbates,
+        adsorbates=oer_adsorbates,
         vasp_yaml_path=vasp_yaml_path,
         solvent_correction_yaml_path=solvent_correction_yaml_path
     )
@@ -49,7 +49,7 @@ for metal in metals:
     diffG_eq = result["diffG_eq"]
 
     print(f"------- metal = {metal} -------")
-    print(f"ORR overpotential: {eta:.3f} [V]")
+    print(f"OER overpotential: {eta:.3f} [V]")
     print(f"Limiting potential: {u_l:.3f} [V]")
     print("Reaction Free Energy Change at U = 0 [V]:", [f"{x:.3f}" for x in diffG_U0])
     print("Reaction Free Energy Change at U = 1.23 [V]:", [f"{x:.3f}" for x in diffG_eq])

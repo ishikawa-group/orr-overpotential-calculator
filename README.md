@@ -1,6 +1,6 @@
-# ORR Overpotential Calculator
+# OER Overpotential Calculator
 
-* A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR).
+* A Python package for calculating overpotentials of the Oxygen Evolution Reaction (OER).
 
 ## Table of Contents
 
@@ -16,13 +16,13 @@
 ### From GitHub Repository
 
 ```bash
-pip install git+https://github.com/ishikawa-group/orr_overpotential_calculator.git
+pip install git+https://github.com/ishikawa-group/oer_overpotential_calculator.git
 ```
 
 ### From Pre-built Wheel
 
 ```bash
-pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
+pip install oer_overpotential_calculator-0.1.0-py3-none-any.whl
 ```
 
 ## Quick Start
@@ -37,34 +37,34 @@ pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
 
 ```python
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from oer_overpotential_calculator import calc_oer_overpotential
 
 # Create a Pt(111) surface
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
-# Calculate ORR overpotential
-result = calc_orr_overpotential(bulk=bulk)
+# Calculate OER overpotential
+result = calc_oer_overpotential(bulk=bulk)
 eta = result["eta"]
 
-print(f"ORR overpotential: {eta:.3f} V")
+print(f"OER overpotential: {eta:.3f} V")
 ```
 
 ## Output
 
 * The package generates several output files in the specified `outdir`:
 
-- `ORR_summary.txt`: Summary of energies and overpotential
-- `ORR_free_energy_diagram.png`: Free energy diagram plot
+- `OER_summary.txt`: Summary of energies and overpotential
+- `OER_free_energy_diagram.png`: Free energy diagram plot
 - `all_results.json`: Complete calculation results in JSON format
 - Individual calculation directories for each step
 
 ### Example Output: Free Energy Diagram
 
-* The calculated free energy diagram shows the reaction pathway for the oxygen reduction reaction:
+* The calculated free energy diagram shows the reaction pathway for the oxygen evolution reaction:
 
 <img src="pt_free_energy.png" width="80%">
 
-*Figure: Example of the automatically generated free energy diagram showing the 4-electron ORR pathway on a catalyst surface.*
+*Figure: Example of the automatically generated free energy diagram showing the 4-electron OER pathway on a catalyst surface.*
 
 ## Usage Examples
 
@@ -76,7 +76,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from oer_overpotential_calculator import calc_oer_overpotential
 
 # Configuration parameters
 outdir = str(Path(__file__).parent / "Pt111")
@@ -89,21 +89,21 @@ solvent_correction_yaml_path = str(Path(__file__).parent / "solvent_correction.y
 # Create bulk structure
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
-# Define adsorption sites for ORR intermediates
-orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
+# Define adsorption sites for OER intermediates
+oer_adsorbates: Dict[str, List[Tuple[float, float]]] = {
     "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],  # ontop, bridge, fcc, hcp
     "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
     "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
 }
 
-# Calculate ORR overpotential
-result = calc_orr_overpotential(
+# Calculate OER overpotential
+result = calc_oer_overpotential(
     bulk=bulk,
     outdir=outdir,
     overwrite=overwrite,
     log_level=log_level,
     calculator=calculator,
-    adsorbates=orr_adsorbates,
+    adsorbates=oer_adsorbates,
     vasp_yaml_path=vasp_yaml_path,
     solvent_correction_yaml_path=solvent_correction_yaml_path
 )
@@ -113,7 +113,7 @@ eta = result["eta"]
 limiting_potential = result["U_L"]
 
 # Display results
-print(f"ORR overpotential: {eta:.3f} V")
+print(f"OER overpotential: {eta:.3f} V")
 print(f"Limiting potential: {limiting_potential:.3f} V")
 ```
 * "vasp" can also be used as `calculator`.
@@ -123,7 +123,7 @@ print(f"Limiting potential: {limiting_potential:.3f} V")
 
 ```python
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from oer_overpotential_calculator import calc_oer_overpotential
 
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 
@@ -134,14 +134,14 @@ custom_sites = {
     "OH":  [(0.0, 0.0), (0.33, 0.33), (0.66, 0.66)],  # ontop, fcc, hcp
 }
 
-result = calc_orr_overpotential(
+result = calc_oer_overpotential(
     bulk=bulk,
     adsorbates=custom_sites,
     outdir="custom_sites"
 )
 
 eta = result["eta"]
-print(f"ORR overpotential (custom sites): {eta:.3f} V")
+print(f"OER overpotential (custom sites): {eta:.3f} V")
 ```
 
 ## Parameters
@@ -163,8 +163,8 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 
 * The package generates several output files in the specified `outdir`:
 
-- `ORR_summary.txt`: Summary of energies and overpotential
-- `ORR_free_energy_diagram.png`: Free energy diagram plot
+- `OER_summary.txt`: Summary of energies and overpotential
+- `OER_free_energy_diagram.png`: Free energy diagram plot
 - `all_results.json`: Complete calculation results in JSON format
 - Individual calculation directories for each step
 
@@ -172,9 +172,9 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 
 1. **Nørskov, J. K., Rossmeisl, J., Logadottir, A., & Lindqvist, L.** (2004). Origin of the Overpotential for Oxygen Reduction at a Fuel-Cell Cathode. *The Journal of Physical Chemistry B*, 108(46), 17886-17892. [https://doi.org/10.1021/jp047349j](https://doi.org/10.1021/jp047349j)
 
-2. **Zhang, Q., & Asthagiri, A.** (2019). Solvation effects on DFT predictions of ORR activity on metal surfaces. *Catalysis Today*, 323, 35-43. [https://doi.org/10.1016/j.cattod.2018.07.036](https://doi.org/10.1016/j.cattod.2018.07.036)
+2. **Zhang, Q., & Asthagiri, A.** (2019). Solvation effects on DFT predictions of OER activity on metal surfaces. *Catalysis Today*, 323, 35-43. [https://doi.org/10.1016/j.cattod.2018.07.036](https://doi.org/10.1016/j.cattod.2018.07.036)
 
-3. **Nair, A. S., & Pathak, B.** (2019). Importance of Dispersion and Relativistic Effects for ORR Overpotential Calculation on Pt(111) surface. *arXiv:1908.08697*. [https://doi.org/10.48550/arXiv.1908.08697](https://doi.org/10.48550/arXiv.1908.08697)
+3. **Nair, A. S., & Pathak, B.** (2019). Importance of Dispersion and Relativistic Effects for OER Overpotential Calculation on Pt(111) surface. *arXiv:1908.08697*. [https://doi.org/10.48550/arXiv.1908.08697](https://doi.org/10.48550/arXiv.1908.08697)
 
 4. **Bajdich, M., García-Mota, M., Vojvodic, A., Nørskov, J. K., & Bell, A. T.** (2013). Theoretical Investigation of the Activity of Cobalt Oxides for the Electrochemical Oxidation of Water. *Journal of the American Chemical Society*, 135(36), 13521-13530. [https://doi.org/10.1021/ja405997s](https://doi.org/10.1021/ja405997s)
 

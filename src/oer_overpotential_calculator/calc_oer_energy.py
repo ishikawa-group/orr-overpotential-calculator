@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate energies of the ORR reaction
+Calculate energies of the OER reaction
 """
 
 import os
@@ -22,7 +22,7 @@ from ase.filters import FrechetCellFilter, ExpCellFilter
 from ase.io import write
 
 # Add custom module path
-from orr_overpotential_calculator.tool import (
+from oer_overpotential_calculator.tool import (
     parallel_displacement,
     fix_lower_surface,
     set_initial_magmoms,
@@ -366,7 +366,6 @@ def calculate_adsorption_with_offset(
     add_adsorbate(
         slab_with_adsorbate, adsorbate,
         ADSORBATE_HEIGHT,
-        position="ontop",
         offset=offset
     )
 
