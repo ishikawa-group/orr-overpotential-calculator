@@ -75,7 +75,7 @@ ADSORBATES: Dict[str, List[Tuple[float, float]]] = {
 # Structural parameters (in Angstroms)
 SLAB_VACUUM = 15.0
 GAS_BOX = 15.0
-ADSORBATE_HEIGHT = 2.0
+ADSORBATE_HEIGHT = 0.5
 
 # Logger setup
 logger = logging.getLogger("oer_workflow")

@@ -58,7 +58,7 @@ MOLECULES = {
 # Structural parameters (all in Angstroms)
 SLAB_VACUUM = 15.0      # Vacuum layer thickness for slab calculations
 GAS_BOX = 15.0          # Box size for gas phase calculations
-ADSORBATE_HEIGHT = 2.0  # Initial height of adsorbate above surface
+ADSORBATE_HEIGHT = 0.5  # Initial height of adsorbate above surface
 
 # ----------------------------------------------------------------------
 # Optimization Functions
