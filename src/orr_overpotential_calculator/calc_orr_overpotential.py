@@ -637,15 +637,13 @@ def calc_orr_overpotential(
     outdir_path = Path(outdir).resolve()
     outdir_path.mkdir(parents=True, exist_ok=True)
 
-    # vaspでない場合はbulkディレクトリを作成
-    if calculator != "vasp" and opt_bulk:
+    # bulk/slabディレクトリを作成
+    if opt_bulk:
         bulk_dir = outdir_path / "bulk"
         bulk_dir.mkdir(parents=True, exist_ok=True)
 
-    # vaspでない場合はslabディレクトリを作成
-    if calculator != "vasp":
-        slab_dir = outdir_path / "slab"
-        slab_dir.mkdir(parents=True, exist_ok=True)
+    slab_dir = outdir_path / "slab"
+    slab_dir.mkdir(parents=True, exist_ok=True)
 
     slab_input: Atoms
     bulk_energy: Optional[float] = None
