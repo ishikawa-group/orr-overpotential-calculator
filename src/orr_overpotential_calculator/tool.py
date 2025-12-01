@@ -132,9 +132,17 @@ def fix_lower_surface(atoms, gap_threshold=1.0):
     # Select atomic indices to fix
     fix_indices = [atom.index for atom in atom_fix if atom.tag in lower_layers]
 
-    # Apply FixAtoms constraint
+    # Apply FixAtoms constraint and preserve any existing constraints on the surface
     constraint = FixAtoms(indices=fix_indices)
-    atom_fix.set_constraint(constraint)
+    existing_constraints = atom_fix.constraints
+
+    if existing_constraints:
+        if isinstance(existing_constraints, (list, tuple)):
+            atom_fix.set_constraint(list(existing_constraints) + [constraint])
+        else:
+            atom_fix.set_constraint([existing_constraints, constraint])
+    else:
+        atom_fix.set_constraint(constraint)
 
     return atom_fix
 
