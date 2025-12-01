@@ -150,7 +150,7 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `bulk` | `Atoms` | Required | ASE Atoms object representing the bulk structure |
+| `bulk` | `Atoms` \| `None` | `None` | ASE Atoms object representing the bulk structure; required unless using a provided slab (set to `None` when `opt_bulk=False` and supplying `surface`) |
 | `outdir` | `str` | `"result"` | Directory for saving calculation results |
 | `overwrite` | `bool` | `False` | Whether to overwrite existing calculations |
 | `log_level` | `str` | `"INFO"` | Logging level ("DEBUG", "INFO", "WARNING", "ERROR") |
@@ -158,15 +158,17 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 | `adsorbates` | `Dict` | `None` | Custom adsorption site definitions (optional) |
 | `vasp_yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
 | `solvent_correction_yaml_path` | `str` | `None` | Path to solvent correction YAML file (optional) |
-| `opt_bulk` | `bool` | `True` | Whether to optimize the bulk before slab creation; set `False` to skip bulk handling when a slab is supplied |
-| `surface` | `Atoms` | `None` | Pre-built slab structure to use when `opt_bulk=False` |
+| `opt_bulk` | `bool` | `True` | Whether to optimize the bulk structure before slab generation; set `False` to skip bulk optimization when providing a pre-built `surface` |
+| `surface` | `Atoms` \| `None` | `None` | Pre-built slab structure to use when `opt_bulk=False` |
 
 ### Workflow when starting from a provided slab
 
-When `opt_bulk=False` and a slab `surface` is supplied, the workflow skips bulk optimization and slab generation. The steps are:
+When `opt_bulk=False` and a slab `surface` is supplied, the workflow skips bulk optimization; the provided surface feeds directly into slab optimization. The steps are:
 
-1. **Use provided slab as input** – the given `surface` is taken as-is for the slab optimization stage (no bulk directories are created for non-VASP runs).
-2. **Optimize the clean slab** – `optimize_slab_structure` runs on the provided surface to relax it and record its energy in `slab/optimized_slab.extxyz`.
+* In this mode the `bulk` argument can be `None`; the provided `surface` becomes the starting point.
+
+1. **Use provided slab as input for slab optimization** – the given `surface` is used directly as input for slab optimization (bulk directories are not created for non-VASP runs when `opt_bulk=False`).
+2. **Optimize the clean slab** – `optimize_slab_structure` runs on the provided surface, applying slab preparation operations (such as constraint application, vacuum adjustment, and energy relaxation), and records its energy in `slab/optimized_slab.extxyz`.
 3. **Run gas-phase and adsorption calculations** – `calculate_required_molecules` evaluates gas-phase and adsorbed intermediates on the optimized slab, using the slab energy in place of any bulk reference.
 4. **Compute reaction energies and overpotential** – `compute_reaction_energies` and `get_overpotential_orr` derive ΔE values, limiting potential, and overpotential, writing summaries without bulk energy entries.
 

@@ -137,10 +137,19 @@ def fix_lower_surface(atoms, gap_threshold=1.0):
     existing_constraints = atom_fix.constraints
 
     if existing_constraints:
-        if isinstance(existing_constraints, (list, tuple)):
-            atom_fix.set_constraint(list(existing_constraints) + [constraint])
-        else:
-            atom_fix.set_constraint([existing_constraints, constraint])
+        constraints_list = list(existing_constraints) if isinstance(existing_constraints, (list, tuple)) else [existing_constraints]
+
+        # Merge with any existing FixAtoms constraints to avoid redundant, overlapping constraints
+        merged_fix_indices = set(fix_indices)
+        non_fix_constraints = []
+        for c in constraints_list:
+            if isinstance(c, FixAtoms):
+                merged_fix_indices.update(getattr(c, "index", getattr(c, "indices", [])))
+            else:
+                non_fix_constraints.append(c)
+
+        merged_constraints = non_fix_constraints + [FixAtoms(indices=sorted(merged_fix_indices))]
+        atom_fix.set_constraint(merged_constraints)
     else:
         atom_fix.set_constraint(constraint)
 

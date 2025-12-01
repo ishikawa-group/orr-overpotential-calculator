@@ -595,7 +595,7 @@ def get_overpotential_orr(
 # ---------------------------------------------------------------------------
 
 def calc_orr_overpotential(
-        bulk: Atoms,
+        bulk: Optional[Atoms] = None,
         outdir: str = "result",
         overwrite: bool = False,
         log_level: str = "INFO",
@@ -610,7 +610,7 @@ def calc_orr_overpotential(
     Calculate ORR overpotential for slab systems.
     
     Args:
-        bulk: Bulk crystal structure
+        bulk: Bulk crystal structure (required unless `opt_bulk` is False)
         outdir: Output directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
@@ -637,20 +637,20 @@ def calc_orr_overpotential(
     outdir_path = Path(outdir).resolve()
     outdir_path.mkdir(parents=True, exist_ok=True)
 
-    # vaspでない場合はbulkディレクトリを作成
-    if calculator != "vasp" and opt_bulk:
+    # bulk/slabディレクトリを作成
+    if opt_bulk:
         bulk_dir = outdir_path / "bulk"
         bulk_dir.mkdir(parents=True, exist_ok=True)
 
-    # vaspでない場合はslabディレクトリを作成
-    if calculator != "vasp":
-        slab_dir = outdir_path / "slab"
-        slab_dir.mkdir(parents=True, exist_ok=True)
+    slab_dir = outdir_path / "slab"
+    slab_dir.mkdir(parents=True, exist_ok=True)
 
     slab_input: Atoms
     bulk_energy: Optional[float] = None
 
     if opt_bulk:
+        if bulk is None:
+            raise ValueError("bulk must be provided when opt_bulk is True")
         # 1. Bulk optimization
         logger.info("Optimizing bulk structure...")
         optimized_bulk, bulk_energy = optimize_bulk_structure(
@@ -667,7 +667,8 @@ def calc_orr_overpotential(
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        slab_input, str(outdir_path / "slab"), calculator, vasp_yaml_path
+        slab_input, str(outdir_path / "slab"), calculator, vasp_yaml_path,
+        prepare_slab=opt_bulk,
     )
     write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
 
