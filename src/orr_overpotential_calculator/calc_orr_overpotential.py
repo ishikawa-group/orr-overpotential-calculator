@@ -667,7 +667,8 @@ def calc_orr_overpotential(
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        slab_input, str(outdir_path / "slab"), calculator, vasp_yaml_path
+        slab_input, str(outdir_path / "slab"), calculator, vasp_yaml_path,
+        prepare_slab=opt_bulk,
     )
     write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
 
