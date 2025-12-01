@@ -17,7 +17,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 import yaml
 
@@ -595,7 +595,7 @@ def get_overpotential_orr(
 # ---------------------------------------------------------------------------
 
 def calc_orr_overpotential(
-        bulk: Atoms,
+        bulk: Optional[Atoms] = None,
         outdir: str = "result",
         overwrite: bool = False,
         log_level: str = "INFO",
@@ -603,12 +603,14 @@ def calc_orr_overpotential(
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
+        opt_bulk: bool = True,
+        surface: Optional[Atoms] = None,
     ) -> Dict[str, Any]:
     """
     Calculate ORR overpotential for slab systems.
     
     Args:
-        bulk: Bulk crystal structure
+        bulk: Bulk crystal structure (required unless `opt_bulk` is False)
         outdir: Output directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
@@ -616,6 +618,8 @@ def calc_orr_overpotential(
         adsorbates: Dictionary of adsorption sites
         vasp_yaml_path: Path to VASP configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
+        opt_bulk: Whether to optimize the bulk structure (default True)
+        surface: Pre-built slab structure to use when skipping bulk optimization
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -634,7 +638,7 @@ def calc_orr_overpotential(
     outdir_path.mkdir(parents=True, exist_ok=True)
 
     # vaspでない場合はbulkディレクトリを作成
-    if calculator != "vasp":
+    if calculator != "vasp" and opt_bulk:
         bulk_dir = outdir_path / "bulk"
         bulk_dir.mkdir(parents=True, exist_ok=True)
 
@@ -643,17 +647,29 @@ def calc_orr_overpotential(
         slab_dir = outdir_path / "slab"
         slab_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Bulk optimization
-    logger.info("Optimizing bulk structure...")
-    optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
-    )
-    write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
+    slab_input: Atoms
+    bulk_energy: Optional[float] = None
+
+    if opt_bulk:
+        if bulk is None:
+            raise ValueError("bulk must be provided when opt_bulk is True")
+        # 1. Bulk optimization
+        logger.info("Optimizing bulk structure...")
+        optimized_bulk, bulk_energy = optimize_bulk_structure(
+            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
+        )
+        write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
+        slab_input = optimized_bulk
+    else:
+        if surface is None:
+            raise ValueError("surface must be provided when opt_bulk is False")
+        logger.info("Skipping bulk optimization; using provided surface for slab optimization")
+        slab_input = surface
 
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path
+        slab_input, str(outdir_path / "slab"), calculator, vasp_yaml_path
     )
     write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
 
@@ -671,12 +687,16 @@ def calc_orr_overpotential(
     overpotential = orr_results["eta"]
 
     # Add E_bulk to orr_results for external access
-    orr_results["E_bulk"] = float(bulk_energy)
+    if bulk_energy is not None:
+        orr_results["E_bulk"] = float(bulk_energy)
 
     # 5. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary ---\n\n")
-        f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
+        if bulk_energy is not None:
+            f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
+        else:
+            f.write("E_bulk = N/A (bulk optimization skipped)\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
         f.write(f"Overpotential η = {overpotential:.3f} V\n")
