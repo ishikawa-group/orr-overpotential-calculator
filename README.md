@@ -158,6 +158,17 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 | `adsorbates` | `Dict` | `None` | Custom adsorption site definitions (optional) |
 | `vasp_yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
 | `solvent_correction_yaml_path` | `str` | `None` | Path to solvent correction YAML file (optional) |
+| `opt_bulk` | `bool` | `True` | Whether to optimize the bulk before slab creation; set `False` to skip bulk handling when a slab is supplied |
+| `surface` | `Atoms` | `None` | Pre-built slab structure to use when `opt_bulk=False` |
+
+### Workflow when starting from a provided slab
+
+When `opt_bulk=False` and a slab `surface` is supplied, the workflow skips bulk optimization and slab generation. The steps are:
+
+1. **Use provided slab as input** – the given `surface` is taken as-is for the slab optimization stage (no bulk directories are created for non-VASP runs).
+2. **Optimize the clean slab** – `optimize_slab_structure` runs on the provided surface to relax it and record its energy in `slab/optimized_slab.extxyz`.
+3. **Run gas-phase and adsorption calculations** – `calculate_required_molecules` evaluates gas-phase and adsorbed intermediates on the optimized slab, using the slab energy in place of any bulk reference.
+4. **Compute reaction energies and overpotential** – `compute_reaction_energies` and `get_overpotential_orr` derive ΔE values, limiting potential, and overpotential, writing summaries without bulk energy entries.
 
 ## Output Files
 
