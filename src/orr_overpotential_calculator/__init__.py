@@ -7,6 +7,7 @@ from .calc_orr_overpotential import (
     calc_orr_overpotential,
     calc_cluster_orr_overpotential,
     calc_orr_overpotential_modified,
+    calc_orr_overpotential_batch,
 )
 
 # Result analysis functions  
@@ -33,6 +34,7 @@ __all__ = [
     "calc_orr_overpotential",
     "calc_cluster_orr_overpotential",
     "calc_orr_overpotential_modified",
+    "calc_orr_overpotential_batch",
     "generate_result_csv",
     "create_orr_volcano_plot",
     "place_adsorbate",

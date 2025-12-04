@@ -37,6 +37,12 @@ from orr_overpotential_calculator.calc_orr_energy import (
     attach_modifier_to_surface,
 )
 from .tool import convert_numpy_types
+from .calc_orr_energy_torchsim import (
+    optimize_bulk_structures_ts_multi,
+    optimize_slab_structures_ts_multi,
+    optimize_gas_batch_ts,
+    optimize_adsorption_offsets_ts_multi,
+)
 
 np.set_printoptions(precision=3)
 
@@ -651,7 +657,6 @@ def calc_orr_overpotential(
     if opt_bulk:
         if bulk is None:
             raise ValueError("bulk must be provided when opt_bulk is True")
-        # 1. Bulk optimization
         logger.info("Optimizing bulk structure...")
         optimized_bulk, bulk_energy = optimize_bulk_structure(
             bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
@@ -702,6 +707,156 @@ def calc_orr_overpotential(
     logger.info("Summary written → %s", outdir_path / "ORR_summary.txt")
 
     return orr_results
+
+
+def calc_orr_overpotential_batch(
+        bulks: Optional[List[Atoms]] = None,
+        surfaces: Optional[List[Atoms]] = None,
+        outdir_base: str = "result_batch",
+        overwrite: bool = False,
+        log_level: str = "INFO",
+        adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+        solvent_correction_yaml_path: str = None,
+        opt_bulk: bool = True,
+        ts_model: Any = None,
+        ts_force_tol: float = 0.05,
+        ts_max_steps: int = 500,
+        ts_autobatcher: bool = True,
+        ts_optimizer: Any = None,
+    ) -> Dict[int, Dict[str, Any]]:
+    """
+    Batched ORR overpotential calculation for multiple slabs/bulks using TorchSim.
+
+    Returns a dictionary keyed by system index with ORR results.
+    """
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(levelname)s: %(message)s",
+        stream=sys.stdout,
+    )
+
+    if ts_model is None:
+        raise ValueError("ts_model must be provided for batch TorchSim calculations")
+    if adsorbates is None:
+        adsorbates = ADSORBATES
+
+    # Resolve optimizer
+    if ts_optimizer is None:
+        from torch_sim.optimizers import Optimizer as TSOptimizer
+        ts_opt = TSOptimizer.fire
+    else:
+        ts_opt = ts_optimizer
+
+    if opt_bulk:
+        if bulks is None:
+            raise ValueError("bulks list must be provided when opt_bulk is True")
+        bulk_list = bulks
+    else:
+        if surfaces is None:
+            raise ValueError("surfaces list must be provided when opt_bulk is False")
+        bulk_list = []
+
+    if opt_bulk:
+        logger.info("Batched bulk optimizations (TorchSim)...")
+        opt_bulks, bulk_energies = optimize_bulk_structures_ts_multi(
+            bulk_list,
+            str(Path(outdir_base) / "bulk"),
+            model=ts_model,
+            force_tol=ts_force_tol,
+            max_steps=ts_max_steps,
+            autobatcher=ts_autobatcher,
+            optimizer=ts_opt,
+        )
+        slab_inputs = opt_bulks
+    else:
+        slab_inputs = surfaces
+        bulk_energies = [None] * len(slab_inputs)
+
+    logger.info("Batched slab optimizations (TorchSim)...")
+    opt_slabs, slab_energies = optimize_slab_structures_ts_multi(
+        slab_inputs,
+        str(Path(outdir_base) / "slab"),
+        model=ts_model,
+        force_tol=ts_force_tol,
+        max_steps=ts_max_steps,
+        autobatcher=ts_autobatcher,
+        optimizer=ts_opt,
+        prepare_slab=True,  # ensure fix_lower_surface + vacuum even when surfaces provided
+        vacuum=SLAB_VACUUM,
+    )
+
+    logger.info("Batched gas-phase optimizations (TorchSim)...")
+    gas_results = optimize_gas_batch_ts(
+        MOLECULES,
+        GAS_BOX,
+        Path(outdir_base),
+        model=ts_model,
+        force_tol=ts_force_tol,
+        max_steps=ts_max_steps,
+        autobatcher=ts_autobatcher,
+        optimizer=ts_opt,
+    )
+
+    logger.info("Batched adsorption optimizations across slabs (TorchSim)...")
+    ads_results_per_slab = optimize_adsorption_offsets_ts_multi(
+        opt_slabs,
+        slab_energies,
+        MOLECULES,
+        adsorbates,
+        gas_only=GAS_ONLY,
+        outdir=Path(outdir_base),
+        model=ts_model,
+        height=ADSORBATE_HEIGHT,
+        vacuum=SLAB_VACUUM,
+        force_tol=ts_force_tol,
+        max_steps=ts_max_steps,
+        autobatcher=ts_autobatcher,
+        optimizer=ts_opt,
+        overwrite=overwrite,
+    )
+
+    results_all: Dict[int, Dict[str, Any]] = {}
+
+    for idx, (slab_energy, bulk_energy, ads_result) in enumerate(zip(slab_energies, bulk_energies, ads_results_per_slab)):
+        # merge gas results
+        merged: Dict[str, Any] = {name: {"E_gas": float(energy)} for name, (_, energy) in gas_results.items()}
+        # add adsorption data
+        for mol, data in ads_result.items():
+            if mol in merged:
+                merged[mol].update(data)
+            else:
+                merged[mol] = data
+            # compute E_ads_best if possible
+            if "E_total_best" in merged[mol]:
+                gas_e = merged[mol].get("E_gas", 0.0)
+                merged[mol]["E_ads_best"] = float(merged[mol]["E_total_best"] - (slab_energy + gas_e))
+
+        if bulk_energy is not None:
+            merged["E_bulk"] = float(bulk_energy)
+
+        reaction_energies, energies = compute_reaction_energies(merged, slab_energy, solvent_correction_yaml_path)
+        system_outdir = Path(outdir_base) / f"system_{idx}"
+        system_outdir.mkdir(parents=True, exist_ok=True)
+        orr_results = get_overpotential_orr(reaction_energies, system_outdir, verbose=True, save_plot=True)
+        overpotential = orr_results["eta"]
+
+        if bulk_energy is not None:
+            orr_results["E_bulk"] = float(bulk_energy)
+
+        # summary write
+        with (system_outdir / "ORR_summary.txt").open("w") as f:
+            f.write("--- ORR Summary (batched) ---\n\n")
+            if bulk_energy is not None:
+                f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
+            else:
+                f.write("E_bulk = N/A (bulk optimization skipped)\n")
+            f.write(json.dumps(convert_numpy_types(energies), indent=2))
+            f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
+            f.write(f"Overpotential η = {overpotential:.3f} V\n")
+
+        results_all[idx] = orr_results
+
+    return results_all
 
 
 def calc_cluster_orr_overpotential(

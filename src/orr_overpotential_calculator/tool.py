@@ -354,7 +354,7 @@ def my_calculator(
     elif calculator == "mace":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE
+        from ase.optimize import BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
@@ -372,7 +372,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -383,7 +383,7 @@ def my_calculator(
     elif calculator == "mace-mh":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE
+        from ase.optimize import BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
@@ -401,7 +401,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -412,7 +412,7 @@ def my_calculator(
     elif calculator == "mace-mh-d3":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE
+        from ase.optimize import BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
@@ -431,7 +431,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -442,7 +442,7 @@ def my_calculator(
     elif calculator == "mace-mh-oc20":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE
+        from ase.optimize import BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
@@ -460,7 +460,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -471,7 +471,7 @@ def my_calculator(
     elif calculator == "mace-mh-oc20-d3":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE
+        from ase.optimize import BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
@@ -490,7 +490,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -501,7 +501,7 @@ def my_calculator(
     elif calculator == "mace-d3":
         from mace.calculators import mace_mp
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE
+        from ase.optimize import BFGSLineSearch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
@@ -520,7 +520,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -533,7 +533,7 @@ def my_calculator(
         from orb_models.forcefield.calculator import ORBCalculator
 
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE, LBFGS
+        from ase.optimize import BFGSLineSearch, LBFGS
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         orb = pretrained.orb_v3_conservative_inf_omat(device=device, precision="float32-highest")
@@ -548,7 +548,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -560,7 +560,7 @@ def my_calculator(
         from sevenn.calculator import SevenNetCalculator
 
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE, LBFGS
+        from ase.optimize import BFGSLineSearch, LBFGS
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -574,7 +574,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = FIRE(atoms)
+        optimizer = BFGSLineSearch(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
