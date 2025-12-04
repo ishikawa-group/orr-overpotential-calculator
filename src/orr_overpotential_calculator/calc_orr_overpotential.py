@@ -723,6 +723,7 @@ def calc_orr_overpotential_batch(
         ts_max_steps: int = 500,
         ts_autobatcher: bool = True,
         ts_optimizer: Any = None,
+        labels: Optional[List[str]] = None,
     ) -> Dict[int, Dict[str, Any]]:
     """
     Batched ORR overpotential calculation for multiple slabs/bulks using TorchSim.
@@ -813,11 +814,20 @@ def calc_orr_overpotential_batch(
         autobatcher=ts_autobatcher,
         optimizer=ts_opt,
         overwrite=overwrite,
+        labels=labels,
     )
 
-    results_all: Dict[int, Dict[str, Any]] = {}
+    # labels for mapping
+    if labels is None:
+        label_list = [str(i) for i in range(len(slab_energies))]
+    else:
+        if len(labels) != len(slab_energies):
+            raise ValueError("labels length must match number of systems")
+        label_list = labels
 
-    for idx, (slab_energy, bulk_energy, ads_result) in enumerate(zip(slab_energies, bulk_energies, ads_results_per_slab)):
+    results_all: Dict[int | str, Dict[str, Any]] = {}
+
+    for idx, (label, slab_energy, bulk_energy, ads_result) in enumerate(zip(label_list, slab_energies, bulk_energies, ads_results_per_slab)):
         # merge gas results
         merged: Dict[str, Any] = {name: {"E_gas": float(energy)} for name, (_, energy) in gas_results.items()}
         # add adsorption data
@@ -835,7 +845,7 @@ def calc_orr_overpotential_batch(
             merged["E_bulk"] = float(bulk_energy)
 
         reaction_energies, energies = compute_reaction_energies(merged, slab_energy, solvent_correction_yaml_path)
-        system_outdir = Path(outdir_base) / f"system_{idx}"
+        system_outdir = Path(outdir_base) / f"system_{label}"
         system_outdir.mkdir(parents=True, exist_ok=True)
         orr_results = get_overpotential_orr(reaction_energies, system_outdir, verbose=True, save_plot=True)
         overpotential = orr_results["eta"]
@@ -854,7 +864,7 @@ def calc_orr_overpotential_batch(
             f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
             f.write(f"Overpotential η = {overpotential:.3f} V\n")
 
-        results_all[idx] = orr_results
+        results_all[label] = orr_results
 
     return results_all
 

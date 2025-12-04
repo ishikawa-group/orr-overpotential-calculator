@@ -376,6 +376,7 @@ def optimize_adsorption_offsets_ts_multi(
     molecules: Dict[str, Atoms],
     offsets_dict: Dict[str, List[Tuple[float, float]]],
     *,
+    labels: List[str] | None = None,
     gas_only: Iterable[str] = (),
     outdir: Path,
     model,
@@ -399,13 +400,14 @@ def optimize_adsorption_offsets_ts_multi(
     metas: List[Tuple[int, str, str]] = []  # (slab_idx, mol_name, key)
 
     for slab_idx, (slab, slab_energy) in enumerate(zip(slabs, slab_energies)):
+        label = labels[slab_idx] if labels else str(slab_idx)
         for mol_name, mol in molecules.items():
             if mol_name in gas_only_set:
                 continue
             offsets = offsets_dict.get(mol_name, [])
             for offset in offsets:
                 key = f"ofst_{offset[0]}_{offset[1]}"
-                work_dir = outdir / f"slab_{slab_idx}" / mol_name / "adsorption" / key
+                work_dir = outdir / f"slab_{label}" / mol_name / "adsorption" / key
                 work_dir.mkdir(parents=True, exist_ok=True)
 
                 slab_copy = slab.copy()
@@ -415,7 +417,7 @@ def optimize_adsorption_offsets_ts_multi(
                 slab_copy = set_initial_magmoms(slab_copy, kind="slab")
 
                 systems.append(slab_copy)
-                metas.append((slab_idx, mol_name, key))
+                metas.append((slab_idx, label, mol_name, key))
 
     if not systems:
         return []
@@ -432,8 +434,8 @@ def optimize_adsorption_offsets_ts_multi(
     # Collect per-slab results
     per_slab: List[Dict[str, Dict[str, Any]]] = [dict() for _ in slabs]
 
-    for (slab_idx, mol_name, key), (atoms_opt, total_energy) in zip(metas, optimized):
-        write(str(outdir / f"slab_{slab_idx}" / mol_name / "adsorption" / key / "opt.extxyz"), atoms_opt)
+    for (slab_idx, label, mol_name, key), (atoms_opt, total_energy) in zip(metas, optimized):
+        write(str(outdir / f"slab_{label}" / mol_name / "adsorption" / key / "opt.extxyz"), atoms_opt)
         slab_energy = slab_energies[slab_idx]
         entry = per_slab[slab_idx].setdefault(mol_name, {"offsets": {}, "E_slab": float(slab_energy)})
         entry["offsets"][key] = {"E_total": float(total_energy), "elapsed": None}
