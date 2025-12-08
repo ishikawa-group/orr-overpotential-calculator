@@ -5,8 +5,8 @@ from typing import Dict, Any, List, Tuple
 from ase.build import fcc111
 from orr_overpotential_calculator import calc_orr_overpotential
 
-metals = ["Ni"]
 # metals = ["Ni", "Cu", "Rh", "Pd", "Ag", "Ir", "Pt", "Au"]
+metals = ["Ni", "Pt", "Au"]
 
 # Ref for lattice constants: https://periodictable.com/Properties/A/LatticeConstants.html
 lattice_constants = {"Ni": 3.524, "Cu": 3.615, "Rh": 3.803, "Pd": 3.891, "Ag": 4.085, "Ir": 3.839,

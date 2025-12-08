@@ -8,7 +8,6 @@
 - [Quick Start](#quick-start)
 - [Usage Examples](#usage-examples)
 - [Parameters](#parameters)
-- [Dependencies](#dependencies)
 - [References](#references)
 
 ## Installation

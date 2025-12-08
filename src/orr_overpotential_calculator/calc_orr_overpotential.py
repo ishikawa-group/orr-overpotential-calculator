@@ -10,19 +10,15 @@ The lowest energy configuration is adopted as the representative value for each
 adsorbate species to evaluate ΔE and η.
 """
 from __future__ import annotations
-import argparse
 import json
 import logging
-import os
 import sys
-import time
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
 import numpy as np
 from ase import Atoms
-from ase.build import fcc111, add_adsorbate
-from ase.io import read, write
+from ase.io import write
 
 # External helper functions
 from orr_overpotential_calculator.calc_orr_energy import (
@@ -45,13 +41,13 @@ np.set_printoptions(precision=3)
 # Molecular library (gas-phase includes all species, adsorbates are subset)
 MOLECULES: Dict[str, Atoms] = {
     # Adsorbates (gas + adsorption calculations)
-    "OH": Atoms("OH", positions=[(0, 0, 0), (0, 0, 0.97)]),
+    "OH":  Atoms("OH",  positions=[(0, 0, 0), (0, 0, 0.97)]),
     "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),
-    "O": Atoms("O", positions=[(0, 0, 0)]),
+    "O":   Atoms("O",   positions=[(0, 0, 0)]),
     # Gas-phase only
-    "O2": Atoms("OO", positions=[(0, 0, 0), (0, 0, 1.21)]),
+    "O2":  Atoms("OO",  positions=[(0, 0, 0), (0, 0, 1.21)]),
     "H2O": Atoms("OHH", positions=[(0, 0, 0), (0.759, 0, 0.588), (-0.759, 0, 0.588)]),
-    "H2": Atoms("HH", positions=[(0, 0, 0), (0, 0, 0.74)]),
+    "H2":  Atoms("HH",  positions=[(0, 0, 0), (0, 0, 0.74)]),
 }
 
 # Molecules that skip adsorption calculations
@@ -60,8 +56,8 @@ GAS_ONLY: set[str] = {"H2", "O2", "H2O"}
 # Default adsorption sites (fractional coordinates)
 ADSORBATES: Dict[str, List[Tuple[float, float]]] = {
     "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],  # ontop, bridge, hollow
-    "O": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
-    "OH": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
+    "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
+    "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
 }
 
 # Structural parameters (in Angstroms)
@@ -152,10 +148,7 @@ def calculate_required_molecules(
                     optimized_slab, optimized_molecule, offset, str(work_dir),
                     calculator, yaml_path
                 )
-                json.dump({
-                    "E_total": total_energy,
-                    "elapsed": elapsed_time
-                }, offset_json.open("w"))
+                json.dump({"E_total": total_energy, "elapsed": elapsed_time}, offset_json.open("w"))
                 (work_dir / ".done").touch()
 
             offset_data[key] = {"E_total": total_energy, "elapsed": elapsed_time}
@@ -177,11 +170,8 @@ def calculate_required_molecules(
             logger.info("  -> Best offset: %s   E_ads = %.3f eV", best_key, best_adsorption_energy)
 
     # 5. Save summary results
-    json.dump(
-        convert_numpy_types(results),
-        (outdir / "all_results.json").open("w"),
-        indent=2
-    )
+    json.dump(convert_numpy_types(results), (outdir / "all_results.json").open("w"), indent=2)
+
     return results
 
 
@@ -220,8 +210,8 @@ def calculate_required_molecules_with_indices(
     if indices_dict is None:
         indices_dict = {
             "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-            "O": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-            "OH": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+            "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+            "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
         }
 
     for molecule_name, molecule in MOLECULES.items():
@@ -293,15 +283,11 @@ def calculate_required_molecules_with_indices(
                 "E_ads_best": float(best_adsorption_energy),
                 "sites": indices_data,
             })
-            logger.info("  -> Best site: %s   E_ads = %.3f eV",
-                        best_key, best_adsorption_energy)
+            logger.info("  -> Best site: %s  E_ads = %.3f eV", best_key, best_adsorption_energy)
 
     # 5. Save summary results
-    json.dump(
-        convert_numpy_types(results),
-        (outdir / "all_results.json").open("w"),
-        indent=2
-    )
+    json.dump(convert_numpy_types(results), (outdir / "all_results.json").open("w"),indent=2)
+
     return results
 
 
@@ -309,7 +295,7 @@ def calculate_required_molecules_with_indices(
 # Reaction Energy and Overpotential Calculation Functions
 # ---------------------------------------------------------------------------
 
-def compute_reaction_energies(
+def get_reaction_energies(
         results: Dict[str, Any],
         slab_energy: float
     ) -> Tuple[List[float], Dict[str, float]]:
@@ -400,7 +386,6 @@ def get_overpotential_orr(
     }
 
     # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/ja405997s
-    #
     entropy = {
         "H2": 0.403 / temperature, "H2O": 0.67 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
@@ -426,11 +411,11 @@ def get_overpotential_orr(
         temperature * entropy["H2O"] - temperature * entropy["OHads"] - 0.5 * temperature * entropy["H2"],
     ])
 
-    # Calculate free energies
+    # Calculate Gibbs energies
     reaction_energies = np.array(reaction_energies)
     delta_g_u0 = reaction_energies + delta_zpe - delta_ts  # ΔG at U=0 V
 
-    # Free energy profiles
+    # Gibbs energy profiles
     g_profile_u0 = np.concatenate(([0.0], np.cumsum(delta_g_u0)))
     equilibrium_potential = 1.23  # V
 
@@ -465,9 +450,9 @@ def get_overpotential_orr(
         gul_shift = g_profile_ul - g_profile_ul[-1]
 
         # Colors for different potential profiles
-        u0_color = 'black'  # U=0V is black
-        ueq_color = 'green'  # U=1.23V is green
-        ul_color = 'blue'  # U=UL is blue
+        u0_color = 'black'   # U = 0 V is black
+        ueq_color = 'green'  # U = 1.23 V is green
+        ul_color = 'blue'    # U = UL is blue
 
         # Horizontal line width
         line_width = 0.3
@@ -487,29 +472,24 @@ def get_overpotential_orr(
 
         # Connect points with dashed lines
         for i in range(len(steps) - 1):
-            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
-                     [g0_shift[i], g0_shift[i + 1]],
+            plt.plot([steps[i] + line_width, steps[i + 1] - line_width], [g0_shift[i], g0_shift[i + 1]],
                      '--', color=u0_color, alpha=0.6, linewidth=1.0)
 
         # Add markers
-        plt.plot(steps, g0_shift, 'o', color=u0_color, alpha=0.6,
-                 markersize=4, linestyle='none')
+        plt.plot(steps, g0_shift, 'o', color=u0_color, alpha=0.6, markersize=4, linestyle='none')
 
         # ------ U=UL (Limiting Potential) profile ------
         # First point with label
         plt.hlines(gul_shift[0], steps[0] - line_width, steps[0] + line_width,
-                   color=ul_color, linewidth=2.5,
-                   label=f"U$_{{L}}$ = {limiting_potential:.2f} V")
+                   color=ul_color, linewidth=2.5, label=f"U$_{{L}}$ = {limiting_potential:.2f} V")
 
         # Remaining points without label
         for i in range(1, len(steps)):
-            plt.hlines(gul_shift[i], steps[i] - line_width, steps[i] + line_width,
-                       color=ul_color, linewidth=2.5)
+            plt.hlines(gul_shift[i], steps[i] - line_width, steps[i] + line_width, color=ul_color, linewidth=2.5)
 
         # Connect points with dashed lines
         for i in range(len(steps) - 1):
-            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
-                     [gul_shift[i], gul_shift[i + 1]],
+            plt.plot([steps[i] + line_width, steps[i + 1] - line_width], [gul_shift[i], gul_shift[i + 1]],
                      '--', color=ul_color, linewidth=1.0)
 
         # Add markers
@@ -518,8 +498,7 @@ def get_overpotential_orr(
         # ------ U=Equilibrium (1.23V) profile ------
         # First point with label
         plt.hlines(geq_shift[0], steps[0] - line_width, steps[0] + line_width,
-                   color=ueq_color, alpha=0.8, linewidth=2.5,
-                   label=f"U = {equilibrium_potential} V")
+                   color=ueq_color, alpha=0.8, linewidth=2.5, label=f"U = {equilibrium_potential} V")
 
         # Remaining points without label
         for i in range(1, len(steps)):
@@ -528,13 +507,11 @@ def get_overpotential_orr(
 
         # Connect points with dashed lines
         for i in range(len(steps) - 1):
-            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
-                     [geq_shift[i], geq_shift[i + 1]],
+            plt.plot([steps[i] + line_width, steps[i + 1] - line_width], [geq_shift[i], geq_shift[i + 1]],
                      '--', color=ueq_color, alpha=0.8, linewidth=1.0)
 
         # Add markers
-        plt.plot(steps, geq_shift, 'o', color=ueq_color, alpha=0.8,
-                 markersize=6, linestyle='none')
+        plt.plot(steps, geq_shift, 'o', color=ueq_color, alpha=0.8, markersize=6, linestyle='none')
 
         # Formatting
         plt.xticks(steps, labels, rotation=15, ha='right')
@@ -647,7 +624,7 @@ def calc_orr_overpotential(
     )
 
     # 4. Calculate reaction energies and overpotential
-    reaction_energies, energies = compute_reaction_energies(results, slab_energy)
+    reaction_energies, energies = get_reaction_energies(results, slab_energy)
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
     overpotential = orr_results["eta"]
 
@@ -740,7 +717,7 @@ def calc_cluster_orr_overpotential(
     )
 
     # 3. Calculate reaction energies and overpotential
-    reaction_energies, energies = compute_reaction_energies(results, cluster_energy)
+    reaction_energies, energies = get_reaction_energies(results, cluster_energy)
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
 
     # 4. Write summary
@@ -798,7 +775,7 @@ def calc_orr_overpotential_modified(
 
     # Check modifier molecules and positions
     if modify_adsorbates is None or modify_offset is None:
-        raise ValueError("Surface modifier molecules (modify_adsorbates) and adsorption positions (modify_offset) are required")
+        raise ValueError("Adsorbates (modify_adsorbates) and adsorption positions (modify_offset) are required")
 
     # Directory setup
     base_path = Path(base_dir).resolve()
@@ -866,7 +843,7 @@ def calc_orr_overpotential_modified(
     )
 
     # --- 5. Reaction energy and overpotential calculation ---
-    reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy)
+    reaction_energies, energies = get_reaction_energies(results, modified_slab_energy)
     orr_results = get_overpotential_orr(
         reaction_energies, result_dir, verbose=True, save_plot=True
     )
