@@ -17,7 +17,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 import yaml
 
@@ -47,7 +47,7 @@ np.set_printoptions(precision=3)
 # Molecular library (gas-phase includes all species, adsorbates are subset)
 MOLECULES: Dict[str, Atoms] = {
     # Adsorbates (gas + adsorption calculations)
-    "OH": Atoms("OH", positions=[(0, 0, 0), (0, 0, 0.97)]),
+    "OH": Atoms("OH", positions=[(0, 0, 0), (0.686, 0.0, 0.686)]),
     "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),
     "O": Atoms("O", positions=[(0, 0, 0)]),
     # Gas-phase only
@@ -87,6 +87,7 @@ def calculate_required_molecules(
         calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
+        bulk_energy: float = None,
     ) -> Dict[str, Any]:
     """
     Calculate gas-phase and adsorption energies for all required molecules.
@@ -99,6 +100,7 @@ def calculate_required_molecules(
         calculator: Calculator type ("vasp", "mace")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
         vasp_yaml_path: Path to VASP configuration file
+        bulk_energy: Energy of the bulk structure optimization
         
     Returns:
         Dictionary containing all calculation results
@@ -120,7 +122,7 @@ def calculate_required_molecules(
 
         # 1. Gas-phase optimization
         gas_json = gas_dir / "opt_result.json"
-        xyz_gas = gas_dir / "opt.xyz"
+        xyz_gas = gas_dir / "opt.extxyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
             molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
@@ -179,6 +181,9 @@ def calculate_required_molecules(
             logger.info("  -> Best offset: %s   E_ads = %.3f eV", best_key, best_adsorption_energy)
 
     # 5. Save summary results
+    if bulk_energy is not None:
+        results["E_bulk"] = float(bulk_energy)
+    
     json.dump(
         convert_numpy_types(results),
         (outdir / "all_results.json").open("w"),
@@ -236,7 +241,7 @@ def calculate_required_molecules_with_indices(
 
         # 1. Gas-phase optimization
         gas_json = gas_dir / "opt_result.json"
-        xyz_gas = gas_dir / "opt.xyz"
+        xyz_gas = gas_dir / "opt.extxyz"
 
         optimized_molecule, gas_energy = optimize_gas_molecule(
             molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
@@ -370,9 +375,9 @@ def compute_reaction_energies(
     }
 
     # Calculate reaction energies ΔE for 4-electron ORR pathway
-    dE1 = E_slab_OOH - (E_O2_gas + slab_energy + 0.5 * E_H2_gas)  # O2(g) + * + ½H2 → OOH*
-    dE2 = (E_slab_O + E_H2O_gas) - (E_slab_OOH + 0.5 * E_H2_gas)  # OOH* + ½H2 → O* + H2O
-    dE3 = E_slab_OH - (E_slab_O + 0.5 * E_H2_gas)  # O* + ½H2 → OH*
+    dE1 = E_slab_OOH - (E_O2_gas + slab_energy + 0.5 * E_H2_gas)    # O2(g) + * + ½H2 → OOH*
+    dE2 = (E_slab_O + E_H2O_gas) - (E_slab_OOH + 0.5 * E_H2_gas)    # OOH* + ½H2 → O* + H2O
+    dE3 = E_slab_OH - (E_slab_O + 0.5 * E_H2_gas)                   # O* + ½H2 → OH*
     dE4 = (slab_energy + E_H2O_gas) - (E_slab_OH + 0.5 * E_H2_gas)  # OH* + ½H2 → * + H2O
 
     reaction_energies = [dE1, dE2, dE3, dE4]
@@ -406,37 +411,35 @@ def get_overpotential_orr(
     reaction_count = 4  # 4-electron pathway
     assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
-        "H2": 0.27, "H2O": 0.57,
-        "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
+        "H2": 0.27, "H2O": 0.56,
+        "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
     }
+    # Calculate O2 ZPE from H2O and H2
+    zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
-    #
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
-        "H2": 0.40 / temperature, "H2O": 0.67 / temperature,
+        "H2": 0.41 / temperature, "H2O": 0.67 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
-
-    # Calculate O2 corrections
-    zpe["O2"] = 0 + 2 * (zpe["H2O"] - zpe["H2"])
-    entropy["O2"] = 0 + 2 * (entropy["H2O"] - entropy["H2"])
+    # Calculate O2 entropy from H2O and H2
+    entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
 
     # Calculate ZPE and entropy corrections for each reaction step
     delta_zpe = np.array([
-        zpe["OOHads"] + (-0.5 * zpe["H2"] + -zpe["O2"]),
-        zpe["Oads"] + zpe["H2O"] - zpe["OOHads"] - 0.5 * zpe["H2"],
-        zpe["OHads"] - zpe["Oads"] - 0.5 * zpe["H2"],
-        zpe["H2O"] - zpe["OHads"] - 0.5 * zpe["H2"],
+        zpe["OOHads"] - (zpe["O2"] + 0 + 0.5 * zpe["H2"]),              # O2(g) + * + ½H2 → OOH*
+        (zpe["Oads"] + zpe["H2O"]) - (zpe["OOHads"] + 0.5 * zpe["H2"]), # OOH* + ½H2 → O* + H2O
+        zpe["OHads"] - (zpe["Oads"] + 0.5 * zpe["H2"]),                 # O* + ½H2 → OH*
+        (0 + zpe["H2O"]) - (zpe["OHads"] + 0.5 * zpe["H2"]),           # OH* + ½H2 → * + H2O
     ])
 
-    delta_ts = np.array([
-        temperature * entropy["OOHads"] + (-0.5 * temperature * entropy["H2"] + -temperature * entropy["O2"]),
-        temperature * entropy["Oads"] + temperature * entropy["H2O"] - temperature * entropy[
-            "OOHads"] - 0.5 * temperature * entropy["H2"],
-        temperature * entropy["OHads"] - temperature * entropy["Oads"] - 0.5 * temperature * entropy["H2"],
-        temperature * entropy["H2O"] - temperature * entropy["OHads"] - 0.5 * temperature * entropy["H2"],
+    delta_ts = temperature * np.array([
+        entropy["OOHads"] - (entropy["O2"] + 0 + 0.5 * entropy["H2"]),              # O2(g) + * + ½H2 → OOH*
+        (entropy["Oads"] + entropy["H2O"]) - (entropy["OOHads"] + 0.5 * entropy["H2"]), # OOH* + ½H2 → O* + H2O
+        entropy["OHads"] - (entropy["Oads"] + 0.5 * entropy["H2"]),                 # O* + ½H2 → OH*
+        (0 + entropy["H2O"]) - (entropy["OHads"] + 0.5 * entropy["H2"]),           # OH* + ½H2 → * + H2O
     ])
 
     # Calculate free energies
@@ -592,20 +595,22 @@ def get_overpotential_orr(
 # ---------------------------------------------------------------------------
 
 def calc_orr_overpotential(
-        bulk: Atoms,
-        outdir: str = "result/matter_sim",
+        bulk: Optional[Atoms] = None,
+        outdir: str = "result",
         overwrite: bool = False,
         log_level: str = "INFO",
         calculator: str = "mace",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
+        opt_bulk: bool = True,
+        surface: Optional[Atoms] = None,
     ) -> Dict[str, Any]:
     """
     Calculate ORR overpotential for slab systems.
     
     Args:
-        bulk: Bulk crystal structure
+        bulk: Bulk crystal structure (required unless `opt_bulk` is False)
         outdir: Output directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
@@ -613,6 +618,8 @@ def calc_orr_overpotential(
         adsorbates: Dictionary of adsorption sites
         vasp_yaml_path: Path to VASP configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
+        opt_bulk: Whether to optimize the bulk structure (default True)
+        surface: Pre-built slab structure to use when skipping bulk optimization
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -630,35 +637,47 @@ def calc_orr_overpotential(
     outdir_path = Path(outdir).resolve()
     outdir_path.mkdir(parents=True, exist_ok=True)
 
-    # vaspでない場合はbulkディレクトリを作成
-    if calculator != "vasp":
+    # bulk/slabディレクトリを作成
+    if opt_bulk:
         bulk_dir = outdir_path / "bulk"
         bulk_dir.mkdir(parents=True, exist_ok=True)
 
-    # vaspでない場合はslabディレクトリを作成
-    if calculator != "vasp":
-        slab_dir = outdir_path / "slab"
-        slab_dir.mkdir(parents=True, exist_ok=True)
+    slab_dir = outdir_path / "slab"
+    slab_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Bulk optimization
-    logger.info("Optimizing bulk structure...")
-    optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
-    )
-    write(str(outdir_path / "bulk" / "optimized_bulk.xyz"), optimized_bulk)
+    slab_input: Atoms
+    bulk_energy: Optional[float] = None
+
+    if opt_bulk:
+        if bulk is None:
+            raise ValueError("bulk must be provided when opt_bulk is True")
+        # 1. Bulk optimization
+        logger.info("Optimizing bulk structure...")
+        optimized_bulk, bulk_energy = optimize_bulk_structure(
+            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
+        )
+        write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
+        slab_input = optimized_bulk
+    else:
+        if surface is None:
+            raise ValueError("surface must be provided when opt_bulk is False")
+        logger.info("Skipping bulk optimization; using provided surface for slab optimization")
+        slab_input = surface
 
     # 2. Clean slab optimization
     logger.info("Optimizing clean slab...")
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path
+        slab_input, str(outdir_path / "slab"), calculator, vasp_yaml_path,
+        prepare_slab=opt_bulk,
     )
-    write(str(outdir_path / "slab" / "optimized_slab.xyz"), optimized_slab)
+    write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
 
     # 3. Gas and adsorption calculations (offset scheme)
     logger.info("Running required molecule calculations...")
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
         overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, vasp_yaml_path=vasp_yaml_path,
+        bulk_energy=bulk_energy,
     )
 
     # 4. Calculate reaction energies and overpotential
@@ -666,9 +685,17 @@ def calc_orr_overpotential(
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
     overpotential = orr_results["eta"]
 
+    # Add E_bulk to orr_results for external access
+    if bulk_energy is not None:
+        orr_results["E_bulk"] = float(bulk_energy)
+
     # 5. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary ---\n\n")
+        if bulk_energy is not None:
+            f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
+        else:
+            f.write("E_bulk = N/A (bulk optimization skipped)\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
         f.write(f"Overpotential η = {overpotential:.3f} V\n")
@@ -734,7 +761,7 @@ def calc_cluster_orr_overpotential(
         cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path
     )
 
-    write(str(outdir_path / "cluster" / "optimized_cluster.xyz"), optimized_cluster)
+    write(str(outdir_path / "cluster" / "optimized_cluster.extxyz"), optimized_cluster)
 
     # 2. Gas and adsorption calculations (index scheme)
     logger.info("Running required molecule calculations...")
@@ -759,6 +786,9 @@ def calc_cluster_orr_overpotential(
     # 3. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, cluster_energy, solvent_correction_yaml_path)
     orr_results = get_overpotential_orr(reaction_energies, outdir_path, verbose=True, save_plot=True)
+
+    # Add cluster energy as E_bulk for consistency
+    orr_results["E_bulk"] = float(cluster_energy)
 
     # 4. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
@@ -831,7 +861,7 @@ def calc_orr_overpotential_modified(
     optimized_bulk, bulk_energy = optimize_bulk_structure(
         bulk, str(bulk_dir), calculator, vasp_yaml_path
     )
-    write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
+    write(str(bulk_dir / "optimized_bulk.extxyz"), optimized_bulk)
 
     # --- 2. Clean slab optimization ---
     logger.info("Optimizing clean slab structure...")
@@ -841,7 +871,7 @@ def calc_orr_overpotential_modified(
     optimized_slab, slab_energy = optimize_slab_structure(
         optimized_bulk, str(slab_dir), calculator, vasp_yaml_path
     )
-    write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
+    write(str(slab_dir / "optimized_slab.extxyz"), optimized_slab)
 
     # --- 3. Modifier molecule optimization and adsorption ---
     # Use the first modifier molecule
@@ -864,7 +894,7 @@ def calc_orr_overpotential_modified(
     )
 
     # Save modified slab
-    modified_slab_path = base_path / f"modified_slab_{modifier_name}.xyz"
+    modified_slab_path = base_path / f"modified_slab_{modifier_name}.extxyz"
     modified_slab.write(str(modified_slab_path))
     logger.info(f"Saved modified slab structure: {modified_slab_path}")
 
@@ -904,6 +934,7 @@ def calc_orr_overpotential_modified(
     orr_results.update({
         "modifier": modifier_name,
         "modifier_offset": modifier_offset,
+        "E_bulk": float(bulk_energy),  # Add bulk energy for consistency
     })
 
     return orr_results

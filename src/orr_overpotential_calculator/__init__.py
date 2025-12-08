@@ -15,6 +15,7 @@ from .tool import (
     create_orr_volcano_plot,
     place_adsorbate,
     plot_free_energy_diagram,
+    create_trend_plot,
 )
 
 # Essential utilities

@@ -3,6 +3,11 @@ from pathlib import Path
 import numpy as np
 import yaml
 import os
+import warnings
+from ase.calculators.calculator import Calculator
+
+# Suppress scipy warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
 
 
 def convert_numpy_types(obj):
@@ -20,12 +25,14 @@ def convert_numpy_types(obj):
     return obj
 
 
-def get_number_of_layers(atoms):
+def get_number_of_layers(atoms, gap_threshold=1.0):
     """
     Calculate the number of layers in a model based on atomic z-coordinates.
+    Uses gap detection to identify physical layers.
     
     Args:
         atoms: ASE atoms object
+        gap_threshold: Minimum gap size (Å) to separate layers (default: 1.0)
         
     Returns:
         int: Number of layers
@@ -33,52 +40,77 @@ def get_number_of_layers(atoms):
     import numpy as np
 
     positions = atoms.positions
-    # Round z-coordinates for layer identification (3 decimal places)
-    z_positions = np.round(positions[:, 2], decimals=3)
-    num_layers = len(set(z_positions))
+    z_coords = positions[:, 2]
+    
+    # Sort all z-coordinates to find natural layer breaks
+    sorted_z = np.sort(z_coords)
+    z_diffs = np.diff(sorted_z)
+    
+    # Count large gaps + 1 = number of layers
+    large_gaps = np.sum(z_diffs > gap_threshold)
+    num_layers = large_gaps + 1
+    
     return num_layers
 
 
-def set_tags_by_z(atoms):
+def set_tags_by_z(atoms, gap_threshold=1.0):
     """
     Set tags for each layer based on atomic z-coordinates.
+    Uses gap detection to identify physical layers for robust layer assignment.
     Each layer is assigned tags 0, 1, 2... from bottom to top.
     
     Args:
         atoms: ASE atoms object
+        gap_threshold: Minimum gap size (Å) to separate layers (default: 1.0)
         
     Returns:
         ASE atoms object with tags set
     """
     import numpy as np
-    import pandas as pd
 
     new_atoms = atoms.copy()
     positions = new_atoms.positions
-    # Round to 1 decimal place (used as layer width guideline)
-    z_positions = np.round(positions[:, 2], decimals=1)
-
-    # Extract unique layer values and ensure ascending order
-    bins = np.sort(np.array(list(set(z_positions)))) + 1.0e-2
-    bins = np.insert(bins, 0, 0)
-
-    # Set labels for each interval (0, 1, 2, ...)
-    labels = list(range(len(bins) - 1))
-    tags = pd.cut(z_positions, bins=bins, labels=labels, include_lowest=True).tolist()
+    z_coords = positions[:, 2]
+    
+    # Sort all z-coordinates to find natural layer breaks
+    sorted_indices = np.argsort(z_coords)
+    sorted_z = z_coords[sorted_indices]
+    z_diffs = np.diff(sorted_z)
+    
+    # Find large gaps between consecutive atoms
+    large_gap_indices = np.where(z_diffs > gap_threshold)[0]
+    
+    # Create layer boundaries based on gap positions
+    layer_breaks = [0] + [gap_idx + 1 for gap_idx in large_gap_indices] + [len(sorted_z)]
+    
+    # Assign tags to each atom
+    tags = np.zeros(len(atoms), dtype=int)
+    for layer_idx in range(len(layer_breaks) - 1):
+        start_idx = layer_breaks[layer_idx]
+        end_idx = layer_breaks[layer_idx + 1]
+        
+        # Get z-coordinate range for this layer
+        z_min = sorted_z[start_idx]
+        z_max = sorted_z[end_idx - 1]
+        
+        # Assign tag to all atoms in this z-range
+        mask = (z_coords >= z_min) & (z_coords <= z_max)
+        tags[mask] = layer_idx
+    
     new_atoms.set_tags(tags)
-
     return new_atoms
 
 
-def fix_lower_surface(atoms):
+def fix_lower_surface(atoms, gap_threshold=1.0):
     """
     Fix the bottom half layers of the model.
     First, set tags based on z-coordinates, then fix atoms in the bottom half layers.
     
-    Example: For 3 layers, floor(3/2)=1, so the bottom 1 layer is fixed.
+    Example: For 4 layers, floor(4/2)=2, so the bottom 2 layers are fixed.
     
     Args:
         atoms: ASE atoms object
+        gap_threshold: Minimum gap size (Å) to separate layers (default: 1.0)
         
     Returns:
         ASE atoms object with bottom half fixed
@@ -88,28 +120,45 @@ def fix_lower_surface(atoms):
 
     atom_fix = atoms.copy()
 
-    # Set tags (layer numbers from bottom)
-    atom_fix = set_tags_by_z(atom_fix)
+    # Set tags (layer numbers from bottom) - using consistent gap_threshold
+    atom_fix = set_tags_by_z(atom_fix, gap_threshold=gap_threshold)
     tags = atom_fix.get_tags()
 
-    # Get total number of layers
-    num_layers = get_number_of_layers(atom_fix)
+    # Get total number of layers - using consistent gap_threshold
+    num_layers = get_number_of_layers(atom_fix, gap_threshold=gap_threshold)
     # Bottom half layer numbers (rounded down)
     lower_layers = list(range(num_layers // 2))
 
     # Select atomic indices to fix
     fix_indices = [atom.index for atom in atom_fix if atom.tag in lower_layers]
 
-    # Apply FixAtoms constraint
+    # Apply FixAtoms constraint and preserve any existing constraints on the surface
     constraint = FixAtoms(indices=fix_indices)
-    atom_fix.set_constraint(constraint)
+    existing_constraints = atom_fix.constraints
+
+    if existing_constraints:
+        constraints_list = list(existing_constraints) if isinstance(existing_constraints, (list, tuple)) else [existing_constraints]
+
+        # Merge with any existing FixAtoms constraints to avoid redundant, overlapping constraints
+        merged_fix_indices = set(fix_indices)
+        non_fix_constraints = []
+        for c in constraints_list:
+            if isinstance(c, FixAtoms):
+                merged_fix_indices.update(getattr(c, "index", getattr(c, "indices", [])))
+            else:
+                non_fix_constraints.append(c)
+
+        merged_constraints = non_fix_constraints + [FixAtoms(indices=sorted(merged_fix_indices))]
+        atom_fix.set_constraint(merged_constraints)
+    else:
+        atom_fix.set_constraint(constraint)
 
     return atom_fix
 
 
-def parallel_displacement(atoms, vacuum=15.0):
+def parallel_displacement(atoms, vacuum=15.0, bottom_z=0.1): 
     """
-    Translate slab in z-direction so the lowest point becomes z=0,
+    Translate slab in z-direction so the lowest point becomes specified z-coordinate,
     and add specified vacuum layer (vacuum[Å]) to the top (positive z-direction).
     
     Note:
@@ -119,9 +168,10 @@ def parallel_displacement(atoms, vacuum=15.0):
     Args:
         atoms: ASE Atoms object (slab, preferably generated without vacuum option)
         vacuum: Thickness of vacuum layer to add (Å). Default is 15.0 Å.
+        bottom_z: Target z-coordinate for the lowest point (Å). Default is 0.1 Å.
     
     Returns:
-        New ASE Atoms object with atomic positions shifted to z=0 bottom alignment
+        New ASE Atoms object with atomic positions shifted to specified bottom alignment
         and cell z-axis length set to (slab height + vacuum).
     """
     # Create copy to avoid modifying original object
@@ -131,8 +181,8 @@ def parallel_displacement(atoms, vacuum=15.0):
     positions = slab.get_positions()
     z_min = positions[:, 2].min()
 
-    # Translate entire slab in z-direction so lowest point becomes z=0
-    slab.translate([0, 0, -z_min])
+    # Translate entire slab in z-direction so lowest point becomes bottom_z
+    slab.translate([0, 0, -z_min + bottom_z]) 
 
     # Get maximum z coordinate after translation
     z_max = slab.get_positions()[:, 2].max()
@@ -140,13 +190,68 @@ def parallel_displacement(atoms, vacuum=15.0):
     new_z_length = z_max + vacuum
 
     # Get cell matrix and set z-direction size to new length
-    # Here we assume the cell's third vector aligns with z-direction
     cell = slab.get_cell().copy()
-    # For safety, reset z-axis component to [0, 0, new_z_length]
     cell[2] = [0.0, 0.0, new_z_length]
-    slab.set_cell(cell, scale_atoms=False)  # scale_atoms=False updates only cell, not atomic coordinates
+    slab.set_cell(cell, scale_atoms=False)
 
     return slab
+
+
+class ProtectedCalculator:
+    """Proxy class to protect calculator from settings changes"""
+    def __init__(self, calculator):
+        self._calculator = calculator
+
+    def __getattr__(self, name):
+        if name == 'set':
+            def protected_set(*args, **kwargs):
+                return self
+
+            return protected_set
+        return getattr(self._calculator, name)
+
+
+class AtomReferenceCalculator(Calculator):
+    implemented_properties = ["energy", "free_energy", "forces", "stress"]
+
+    def __init__(self, energy: float, natoms: int):
+        super().__init__()
+        self._energy = energy
+        self._natoms = natoms
+
+    def calculate(self, atoms=None, properties=None, system_changes=None):
+        super().calculate(atoms, properties, system_changes)
+        self.results = {
+            "energy": self._energy,
+            "free_energy": self._energy,
+            "forces": np.zeros((self._natoms, 3)),
+            "stress": np.zeros(6),
+        }
+
+
+def _lookup_atom_reference(atom_refs, task_name, atomic_number, charge=0):
+    """Resolve atomic reference energy for given task"""
+    from omegaconf import OmegaConf
+
+    refs = atom_refs.get(task_name)
+    if refs is None:
+        return None
+
+    refs = OmegaConf.to_container(refs, resolve=True)
+
+    if isinstance(refs, (list, tuple)):
+        if atomic_number < len(refs):
+            value = refs[atomic_number]
+        else:
+            return None
+    elif isinstance(refs, dict):
+        value = refs.get(atomic_number)
+    else:
+        return None
+
+    if isinstance(value, dict):
+        return value.get(charge, value.get(0))
+    return value
 
 
 def auto_lmaxmix(atoms):
@@ -188,12 +293,12 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calculator: "vasp" / "mattersim" / "mace"- calculator type
+        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "fairchem" / "qe" - calculator type
         yaml_path: Path to YAML configuration file
         calc_directory: Calculation directory for VASP
 
     Returns:
-        atoms: Atoms object with calculator set (ExpCellFilter for bulk calculations)
+        atoms: Atoms object with calculator set (FrechetCellFilter for bulk calculations)
     """
     import yaml
     import sys
@@ -203,7 +308,7 @@ def my_calculator(
 
     # optimizer options
     fmax = 0.05
-    steps = 300
+    steps = 200
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
@@ -233,6 +338,14 @@ def my_calculator(
         if 'kpts' in params and isinstance(params['kpts'], list):
             params['kpts'] = tuple(params['kpts'])
 
+        # Auto-set dipol parameter for slab calculations
+        if kind == "slab":
+            # Calculate center of mass in scaled coordinates
+            center_of_mass_scaled = atoms.get_center_of_mass(scaled=True)
+            dipol_value = [0.5, 0.5, center_of_mass_scaled[2]]
+            params['dipol'] = dipol_value
+            print(f"Auto-set dipol parameter for slab: {dipol_value}")
+
         # Set calculator to atoms object and return
         atoms.calc = Vasp(**params)
         # Automatically set lmaxmix
@@ -240,7 +353,7 @@ def my_calculator(
 
     elif calculator == "mace":
         from mace.calculators import mace_mp
-        from ase.filters import ExpCellFilter
+        from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -251,80 +364,355 @@ def my_calculator(
                                   default_dtype="float64",
                                   device=device)
 
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedMaceCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
         # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedMaceCalculator(mace_calculator)
+        atoms.calc = ProtectedCalculator(mace_calculator)
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
-        if isinstance(atoms, ExpCellFilter):
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=False,
+            default_dtype="float64",
+            device=device,
+            head="omat_pbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh-d3":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=True,
+            dispersion_xc="pbe",
+            default_dtype="float64",
+            device=device,
+            head="omat_pbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh-oc20":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=False,
+            default_dtype="float64",
+            device=device,
+            head="oc20_usemppbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "mace-mh-oc20-d3":
+        from mace.calculators import mace_mp
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
+
+        mace_mh_calculator = mace_mp(
+            model=url,
+            dispersion=True,
+            dispersion_xc="pbe",
+            default_dtype="float64",
+            device=device,
+            head="oc20_usemppbe",
+        )
+
+        atoms.calc = ProtectedCalculator(mace_mh_calculator)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
             atoms = atoms.atoms
         else:
             atoms = atoms
 
     elif calculator == "mace-d3":
         from mace.calculators import mace_mp
-        from ase.filters import ExpCellFilter
+        from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
 
-        mace_calculator = mace_mp(model=url,
+        mace_d3_calculator = mace_mp(model=url,
                                   dispersion=True,
                                   dispersion_xc="pbe",
                                   default_dtype="float64",
                                   device=device)
 
-        # 設定変更を防ぐプロキシクラスを実装
-        class ProtectedMaceCalculator:
-            def __init__(self, calculator):
-                self._calculator = calculator
-
-            def __getattr__(self, name):
-                if name == 'set':
-                    def protected_set(*args, **kwargs):
-                        return self  # 何も変更せずに自身を返す
-
-                    return protected_set
-                return getattr(self._calculator, name)
-
         # 保護されたカリキュレータをセット
-        atoms.calc = ProtectedMaceCalculator(mace_calculator)
+        atoms.calc = ProtectedCalculator(mace_d3_calculator)
 
         # Apply CellFilter for bulk calculations
         if kind == "bulk":
-            atoms = ExpCellFilter(atoms)
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
         optimizer = FIRE(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
-        if isinstance(atoms, ExpCellFilter):
+        if isinstance(atoms, FrechetCellFilter):
             atoms = atoms.atoms
         else:
             atoms = atoms
 
+    elif calculator == "orb-v3":
+        from orb_models.forcefield import pretrained
+        from orb_models.forcefield.calculator import ORBCalculator
+
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE, LBFGS
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        orb = pretrained.orb_v3_conservative_inf_omat(device=device, precision="float32-highest")
+
+        orb_calculator = ORBCalculator(orb, device=device)
+
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedCalculator(orb_calculator)
+
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "7net":
+        from sevenn.calculator import SevenNetCalculator
+
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE, LBFGS
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        sevenn_calculator = SevenNetCalculator('7net-mf-ompa', modal='mpa', enable_cueq=True)
+
+        # 保護されたカリキュレータをセット
+        atoms.calc = ProtectedCalculator(sevenn_calculator)
+
+        # Apply CellFilter for bulk calculations
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+
+        # Perform structure optimization
+        optimizer = FIRE(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+        if isinstance(atoms, FrechetCellFilter):
+            atoms = atoms.atoms
+        else:
+            atoms = atoms
+
+    elif calculator == "uma-s" or calculator == "fairchem":
+        from fairchem.core.calculate import pretrained_mlip                    
+        from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
+        from fairchem.core.units.mlip_unit.api.inference import InferenceSettings  
+
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE, FIRE2, LBFGS, BFGSLineSearch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
+
+        if kind == "bulk":
+            # Bulk optimization step: Use "omat" task
+            fairchem_bulk_calculator = FAIRChemCalculator(predictor, task_name="omat")
+            atoms.calc = ProtectedCalculator(fairchem_bulk_calculator)
+            
+            # Apply FrechetCellFilter
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+            optimizer = BFGSLineSearch(atoms)
+            optimizer.run(fmax=fmax, steps=steps)
+            
+            # Extract atoms from filter
+            atoms = atoms.atoms 
+
+        else: # For "slab" and "gas" optimization step: Use "oc20" task
+            fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
+            atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+            # delete PBC for gas phase calculations
+            if kind == "gas":
+                atoms.set_pbc(False)
+
+            # Perform structure optimization
+            optimizer = BFGSLineSearch(atoms)
+            optimizer.run(fmax=fmax, steps=steps)
+
+    elif calculator == "esen-oc25":
+        from fairchem.core import pretrained_mlip, FAIRChemCalculator
+        from ase.optimize import BFGSLineSearch
+        from omegaconf import OmegaConf
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        predictor = pretrained_mlip.get_predict_unit("esen-sm-conserving-all-oc25", device=device)
+        fairchem_calculator = FAIRChemCalculator(predictor)
+
+        if len(atoms) == 1:
+            task_name = fairchem_calculator.task_name
+            atomic_number = int(atoms.get_atomic_numbers()[0])
+            charge = atoms.info.get("charge", 0)
+
+            energy = _lookup_atom_reference(
+                predictor.atom_refs, task_name, atomic_number, charge=charge
+            )
+            if energy is None:
+                raise ValueError(f"No atomic reference energy found for Z={atomic_number} in task '{task_name}'.")
+
+            atoms.calc = AtomReferenceCalculator(energy, len(atoms))
+            return atoms
+
+        atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+        optimizer = BFGSLineSearch(atoms)
+        optimizer.run(fmax=fmax, steps=steps)
+
+    elif calculator == "qe":
+        from ase.calculators.espresso import Espresso, EspressoProfile
+        from ase.filters import FrechetCellFilter
+        from ase.optimize import FIRE
+
+        # Load YAML file directly
+        try:
+            with open(yaml_path, 'r') as f:
+                qe_params = yaml.safe_load(f)
+        except FileNotFoundError:
+            print(f"Error: QE parameter file not found at {yaml_path}")
+            sys.exit(1)
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML file {yaml_path}: {e}")
+            sys.exit(1)
+
+        if kind not in qe_params['kinds']:
+            raise ValueError(f"Invalid kind '{kind}'. Must be one of {list(qe_params['kinds'].keys())}")
+
+        # Get parameters for this kind
+        common_params = qe_params['common'].copy()
+        kind_params = qe_params['kinds'][kind].copy()
+        
+        # Create EspressoProfile
+        profile = EspressoProfile(
+            command=common_params.get('command', 'mpirun -np 1 pw.x'),
+            pseudo_dir=common_params.get('pseudo_dir', '.')
+        )
+        
+        # Prepare input_data
+        input_data = {}
+        for section in ['control', 'system', 'electrons', 'ions']:
+            if section in common_params:
+                input_data[section] = common_params[section].copy()
+        
+        # Update with kind-specific parameters
+        for section in ['control', 'system', 'electrons', 'ions']:
+            if section in kind_params:
+                if section not in input_data:
+                    input_data[section] = {}
+                input_data[section].update(kind_params[section])
+        
+        # Set directory
+        if 'control' not in input_data:
+            input_data['control'] = {}
+        # Use only the kind name for prefix to avoid path issues
+        input_data['control']['prefix'] = kind
+        
+        # Get k-points
+        kpts = kind_params.get('kpts', [1, 1, 1])
+        if isinstance(kpts, list):
+            kpts = tuple(kpts)
+        
+        # Get pseudopotentials
+        pseudopotentials = common_params.get('pseudopotentials', {})
+        
+        # Create calculator
+        atoms.calc = Espresso(
+            profile=profile,
+            pseudopotentials=pseudopotentials,
+            kpts=kpts,
+            input_data=input_data,
+            directory=f'{calc_directory}/qe_{kind}_tmp'
+        )
+
     else:
-        raise ValueError("calculator must be 'vasp' or 'mace'")
+        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', 'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-s', 'fairchem', or 'qe'")
 
     return atoms
 
@@ -347,12 +735,17 @@ def set_initial_magmoms(atoms, kind: str = "bulk", formula: str = None):
 
     symbols = atoms.get_chemical_symbols()
 
-    # For gas phase closed-shell molecules, set all to 0
-    if kind == "gas" and formula in CLOSED_SHELL_MOLECULES:
-        initial_magmom = [0.0] * len(symbols)
+    # For gas phase molecules
+    if kind == "gas":
+        if formula in CLOSED_SHELL_MOLECULES:
+            # Closed-shell molecules: set all to 0.0001
+            initial_magmom = [0.0001] * len(symbols)
+        else:
+            # Other gas molecules: set all to 1.0
+            initial_magmom = [1.0] * len(symbols)
     else:
-        # Set 1.0 μB for magnetic elements, 0.0 for others
-        initial_magmom = [1.0 if symbol in MAGNETIC_ELEMENTS else 0.0 for symbol in symbols]
+        # For slab/bulk: Set 1.0 μB for magnetic elements, 0.0001 for others
+        initial_magmom = [1.0 if symbol in MAGNETIC_ELEMENTS else 0.0001 for symbol in symbols]
 
     atoms.set_initial_magnetic_moments(initial_magmom)
     return atoms
@@ -538,6 +931,9 @@ def create_orr_volcano_plot(
 
     # Load CSV file
     df = pd.read_csv(csv_file)
+    
+    # Sort dataframe by Material column for alphabetical order
+    df = df.sort_values(by=label_column).reset_index(drop=True)
 
     # Note: Solvent corrections are already applied in compute_reaction_energies
     # when generating the CSV file, so we don't apply them again here to avoid double correction.
@@ -546,17 +942,21 @@ def create_orr_volcano_plot(
     # Constants
     T = 298.15  # K
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
-        "H2": 0.27, "H2O": 0.57,
-        "Oads": 0.07, "OHads": 0.37, "OOHads": 0.45,
+        "H2": 0.27, "H2O": 0.56,
+        "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
     }
+    # Calculate O2 ZPE from H2O and H2
+    zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j
+    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
         "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
+    # Calculate O2 entropy from H2O and H2
+    entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
 
     # Calculate dG_OH
     # Reaction: H2O + * -> OH* + 1/2 H2
@@ -573,15 +973,15 @@ def create_orr_volcano_plot(
     df["dG_OH"] = df["dE_OH"] + delta_zpe_oh - delta_TS_oh
 
     # Calculate dG_O
-    # Reaction: H2O + * -> O* + H2
+    # Reaction: O + * -> O*
     # E_slab_O already includes solvent correction from compute_reaction_energies
     df["dE_O"] = df["E_slab_O"] - df["E_slab"] - (df["E_H2O_g"] - df["E_H2_g"])
 
     # ZPE difference for O reaction
-    delta_zpe_o = zpe["Oads"] - (zpe["H2O"] - zpe["H2"])  # eV
+    delta_zpe_o = zpe["Oads"] -  0.5 * zpe["O2"]  # eV
 
     # TΔS term (products - reactants) for O reaction
-    delta_TS_o = entropy["Oads"] - (entropy["H2O"] - entropy["H2"]) # eV
+    delta_TS_o = entropy["Oads"] - 0.5 * entropy["O2"]  # eV
 
     # ΔG_O
     df["dG_O"] = df["dE_O"] + delta_zpe_o - delta_TS_o
@@ -625,9 +1025,15 @@ def create_orr_volcano_plot(
     if x_column == "dG_O":
         ax.set_xlim(-0.5, 3.5)
         ax.set_ylim(-0.5, 1.5)
+        # Set tick marks every 0.5
+        ax.set_xticks(np.arange(-0.5, 4.0, 0.5))
+        ax.set_yticks(np.arange(-0.5, 2.0, 0.5))
     else:  # dG_OH
         ax.set_xlim(-0.4, 1.6)
         ax.set_ylim(-0.5, 1.5)
+        # Set tick marks every 0.5
+        ax.set_xticks(np.arange(-0.5, 2.0, 0.5))
+        ax.set_yticks(np.arange(-0.5, 2.0, 0.5))
 
     # Add theoretical lines
     # Ideal limiting potential (1.23V) horizontal line
@@ -672,7 +1078,8 @@ def create_orr_volcano_plot(
     ax.set_xlabel(f'{x_column} (eV)', fontsize=14, fontweight='bold')
     ax.set_ylabel(f'{y_column} (V)', fontsize=14, fontweight='bold')
     ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
-    ax.grid(True, linestyle='--', alpha=0.6)
+    # Remove grid (グリッドを削除)
+    # ax.grid(True, linestyle='--', alpha=0.6)
 
     # Material legend
     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i],
@@ -707,31 +1114,111 @@ def create_orr_volcano_plot(
     return str(output_path)
 
 
-def create_dg_o_vs_dg_oh_plot(
-        df,
-        output_file: str,
+def create_trend_plot(
+        csv_file: Union[str, Path],
+        output_file: str = "trend_plot.png",
+        energy_type: str = "G",  # "E" or "G"
+        x_label: str = "OH",  # "O", "OH", or "OOH"
+        y_label: str = "OOH",  # "O", "OH", or "OOH"
         label_column: str = "Material",
         dpi: int = 300,
-        figsize: tuple = (10, 8),
+        figsize: tuple = (10, 10),
         markersize: int = 80,
+        linear_regression: bool = False,  # Show linear regression line
     ) -> str:
     """
-    Generate dG_O vs dG_OH correlation plot with linear regression
+    Generate correlation plot between two adsorption energies with optional linear regression
     
     Args:
-        df: DataFrame containing dG_O and dG_OH data
+        csv_file: Input CSV file path
         output_file: Output image filename
+        energy_type: "E" (electronic energy) or "G" (free energy with ZPE and TS corrections)
+        x_label: X-axis adsorbate ("O", "OH", or "OOH")
+        y_label: Y-axis adsorbate ("O", "OH", or "OOH")
         label_column: Column name for legend
         dpi: Image resolution
         figsize: Figure size (width, height) in inches
         markersize: Marker size
+        linear_regression: Whether to show linear regression line and equation
         
     Returns:
-        Tuple of (path of saved image, slope, intercept, r2_score)
+        Tuple of (path of saved image, slope, intercept, r2_score) or path only if linear_regression=False
     """
+    import pandas as pd
     import matplotlib.pyplot as plt
+    import numpy as np
     from sklearn.linear_model import LinearRegression
     from sklearn.metrics import r2_score
+    from pathlib import Path
+    
+    # Validate inputs
+    if energy_type not in ["E", "G"]:
+        raise ValueError("energy_type must be 'E' or 'G'")
+    if x_label not in ["O", "OH", "OOH"]:
+        raise ValueError("x_label must be 'O', 'OH', or 'OOH'")
+    if y_label not in ["O", "OH", "OOH"]:
+        raise ValueError("y_label must be 'O', 'OH', or 'OOH'")
+    
+    # Load CSV file
+    df = pd.read_csv(csv_file)
+    
+    # Sort dataframe by Material column for alphabetical order
+    df = df.sort_values(by=label_column).reset_index(drop=True)
+    
+    # Constants for G calculations
+    if energy_type == "G":
+        T = 298.15  # K
+
+        # Zero-point energy corrections (eV)
+        zpe = {
+            "H2": 0.27, "H2O": 0.56,
+            "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
+        }
+        zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
+
+        # Entropy terms T*S (eV)
+        entropy = {
+            "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+            "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
+        }
+        entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
+    
+    # Calculate energy differences
+    def calculate_energy(adsorbate):
+        if adsorbate == "OH":
+            # Reaction: H2O + * -> OH* + 1/2 H2
+            dE = df[f"E_slab_{adsorbate}"] - df["E_slab"] - (df["E_H2O_g"] - 0.5 * df["E_H2_g"])
+            if energy_type == "G":
+                delta_zpe = zpe["OHads"] - (zpe["H2O"] - 0.5 * zpe["H2"])
+                delta_TS = entropy["OHads"] - (entropy["H2O"] - 0.5 * entropy["H2"])
+                return dE + delta_zpe - delta_TS
+            return dE
+        elif adsorbate == "O":
+            # Reaction: H2O + * -> O* + H2
+            dE = df[f"E_slab_{adsorbate}"] - df["E_slab"] - (df["E_H2O_g"] - df["E_H2_g"])
+            if energy_type == "G":
+                delta_zpe = zpe["Oads"] - 0.5 * zpe["O2"]
+                delta_TS = entropy["Oads"] - 0.5 * entropy["O2"]
+                return dE + delta_zpe - delta_TS
+            return dE
+        elif adsorbate == "OOH":
+            # Reaction: 2H2O + * -> OOH* + 1.5 H2
+            dE = df[f"E_slab_{adsorbate}"] - df["E_slab"] - (2*df["E_H2O_g"] - 1.5 * df["E_H2_g"])
+            if energy_type == "G":
+                delta_zpe = zpe["OOHads"] - (2*zpe["H2O"] - 1.5 * zpe["H2"])
+                delta_TS = entropy["OOHads"] - (2*entropy["H2O"] - 1.5 * entropy["H2"])
+                return dE + delta_zpe - delta_TS
+            return dE
+    
+    # Calculate x and y values
+    x_values = calculate_energy(x_label)
+    y_values = calculate_energy(y_label)
+    
+    # Set column names for dataframe
+    x_col = f"d{energy_type}_{x_label}"
+    y_col = f"d{energy_type}_{y_label}"
+    df[x_col] = x_values
+    df[y_col] = y_values
     
     # Set font size
     plt.rcParams.update({'font.size': 12})
@@ -748,8 +1235,8 @@ def create_dg_o_vs_dg_oh_plot(
     
     for i, (_, row) in enumerate(df.iterrows()):
         ax.scatter(
-            row["dG_O"],
-            row["dG_OH"],
+            row[x_col],
+            row[y_col],
             color=colors[i],
             s=markersize,
             alpha=0.8,
@@ -761,48 +1248,58 @@ def create_dg_o_vs_dg_oh_plot(
     for i, (_, row) in enumerate(df.iterrows()):
         ax.annotate(
             row[label_column],
-            (row["dG_O"], row["dG_OH"]),
+            (row[x_col], row[y_col]),
             xytext=(5, 5),
             textcoords='offset points',
             fontsize=10,
             fontweight='bold'
         )
     
-    # Perform linear regression
-    X = df[["dG_O"]].values
-    y = df["dG_OH"].values
+    # Initialize return values
+    slope, intercept, r2 = None, None, None
     
-    model = LinearRegression()
-    model.fit(X, y)
+    # Perform linear regression if requested
+    if linear_regression:
+        X = df[[x_col]].values
+        y = df[y_col].values
+        
+        model = LinearRegression()
+        model.fit(X, y)
+        
+        # Calculate R²
+        y_pred = model.predict(X)
+        r2 = r2_score(y, y_pred)
+        
+        # Get regression parameters
+        slope = model.coef_[0]
+        intercept = model.intercept_
+        
+        # Plot regression line
+        x_range = np.linspace(df[x_col].min() - 0.5, df[x_col].max() + 0.5, 100)
+        y_range = model.predict(x_range.reshape(-1, 1))
+        ax.plot(x_range, y_range, 'r-', linewidth=2, alpha=0.8, label='Linear fit')
+        
+        # Add equation and R² to the plot
+        equation_text = f'd{energy_type}_{y_label} = {slope:.3f} × d{energy_type}_{x_label} + {intercept:.3f}\nR² = {r2:.3f}'
+        
+        # Position the text box in upper left corner
+        ax.text(0.05, 0.95, equation_text, 
+                transform=ax.transAxes, 
+                fontsize=12, 
+                fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+                verticalalignment='top')
     
-    # Calculate R²
-    y_pred = model.predict(X)
-    r2 = r2_score(y, y_pred)
-    
-    # Get regression parameters
-    slope = model.coef_[0]
-    intercept = model.intercept_
-    
-    # Plot regression line
-    x_range = np.linspace(df["dG_O"].min() - 0.5, df["dG_O"].max() + 0.5, 100)
-    y_range = model.predict(x_range.reshape(-1, 1))
-    ax.plot(x_range, y_range, 'r-', linewidth=2, alpha=0.8, label='Linear fit')
-    
-    # Add equation and R² to the plot
-    equation_text = f'dG_OH = {slope:.3f} × dG_O + {intercept:.3f}\nR² = {r2:.3f}'
-    
-    # Position the text box in upper left corner
-    ax.text(0.05, 0.95, equation_text, 
-            transform=ax.transAxes, 
-            fontsize=12, 
-            fontweight='bold',
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
-            verticalalignment='top')
+    # Set axis limits based on data range ± 0.5
+    x_min, x_max = df[x_col].min(), df[x_col].max()
+    y_min, y_max = df[y_col].min(), df[y_col].max()
+    ax.set_xlim(x_min - 0.5, x_max + 0.5)
+    ax.set_ylim(y_min - 0.5, y_max + 0.5)
     
     # Set axis labels and title
-    ax.set_xlabel('dG_O (eV)', fontsize=14, fontweight='bold')
-    ax.set_ylabel('dG_OH (eV)', fontsize=14, fontweight='bold')
-    ax.set_title('dG_O vs dG_OH Correlation', fontsize=16, fontweight='bold')
+    ax.set_xlabel(f'd{energy_type}_{x_label} (eV)', fontsize=14, fontweight='bold')
+    ax.set_ylabel(f'd{energy_type}_{y_label} (eV)', fontsize=14, fontweight='bold')
+    ax.set_title(f'd{energy_type}_{x_label} vs d{energy_type}_{y_label} Correlation', fontsize=16, fontweight='bold')
     ax.grid(True, linestyle='--', alpha=0.6)
     
     # Material legend
@@ -814,12 +1311,13 @@ def create_dg_o_vs_dg_oh_plot(
                         frameon=True)
     ax.add_artist(legend1)
     
-    # Regression line legend
-    handles2 = [plt.Line2D([0], [0], color='red', linewidth=2)]
-    labels2 = ['Linear fit']
-    legend2 = ax.legend(handles2, labels2,
-                        loc='upper right',
-                        frameon=True)
+    # Regression line legend (only if linear regression is enabled)
+    if linear_regression:
+        handles2 = [plt.Line2D([0], [0], color='red', linewidth=2)]
+        labels2 = ['Linear fit']
+        legend2 = ax.legend(handles2, labels2,
+                            loc='upper right',
+                            frameon=True)
     
     # Adjust graph layout
     plt.tight_layout()
@@ -829,8 +1327,13 @@ def create_dg_o_vs_dg_oh_plot(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
     
-    print(f"dG_O vs dG_OH plot saved: {output_path}")
-    return str(output_path), slope, intercept, r2
+    print(f"Trend plot saved: {output_path}")
+    
+    # Return different formats based on linear_regression flag
+    if linear_regression:
+        return str(output_path), slope, intercept, r2
+    else:
+        return str(output_path)
 
 
 def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):

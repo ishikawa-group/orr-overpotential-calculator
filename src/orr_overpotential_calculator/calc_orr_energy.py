@@ -46,7 +46,7 @@ SITES = ["ontop", "bridge", "fcc"]
 
 # Molecular geometries (all positions in Angstroms)
 MOLECULES = {
-    "OH":  Atoms("OH",  positions=[(0, 0, 0), (0, 0, 0.97)]),
+    "OH":  Atoms("OH",  positions=[(0, 0, 0), (0.686, 0.0, 0.686)]),
     "H2O": Atoms("OHH", positions=[(0, 0, 0), (0.759, 0, 0.588), (-0.759, 0, 0.588)]),
     "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),  
     "H2":  Atoms("HH",  positions=[(0, 0, 0), (0, 0, 0.74)]),
@@ -54,9 +54,6 @@ MOLECULES = {
     "H":   Atoms("H",   positions=[(0, 0, 0)]),
     "O":   Atoms("O",   positions=[(0, 0, 0)])
     }
-
-# Closed-shell molecules list for spin calculations
-CLOSED_SHELL_MOLECULES = ["H2", "H2O"]
 
 # Structural parameters (all in Angstroms)
 SLAB_VACUUM = 15.0      # Vacuum layer thickness for slab calculations
@@ -104,12 +101,6 @@ def optimize_gas_molecule(
         calc_directory=work_directory
     )
     
-    # For closed-shell molecules, set spin-unpolarized calculation
-    if molecule_name in CLOSED_SHELL_MOLECULES:
-        calculator = optimized_molecule.calc
-        calculator.set(ispin=1)
-        optimized_molecule.set_calculator(calculator)
-    
     energy = optimized_molecule.get_potential_energy()
     return optimized_molecule, energy
 
@@ -148,36 +139,43 @@ def optimize_bulk_structure(
 
 
 def optimize_slab_structure(
-    optimized_bulk: Atoms,
+    input_structure: Atoms,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: str = YAML_PATH,
+    prepare_slab: bool = True,
     ) -> Tuple[Atoms, float]:
     """
-    Create and optimize slab structure from bulk and calculate energy.
-    
+    Optimize a slab structure (generated from bulk or provided directly).
+
     Args:
-        optimized_bulk: Optimized bulk structure
+        input_structure: Slab input structure. Typically generated from an optimized
+            bulk but can also be a user-provided slab.
         work_directory: Directory for calculation files
         calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
-        
+        prepare_slab: Whether to apply slab-preparation steps (fixing lower layers
+            and adding vacuum). Defaults to True for bulk-generated slabs; set to
+            False when the input slab is already prepared.
+
     Returns:
         Tuple of optimized slab Atoms object and energy (eV)
     """
-    slab = optimized_bulk.copy()
+    slab = input_structure.copy()
     slab.set_pbc(True)
-    slab = parallel_displacement(slab, vacuum=SLAB_VACUUM)
-    slab = fix_lower_surface(slab)
-    slab = set_initial_magmoms(slab, kind="slab")
-    
+
+    if prepare_slab:
+        slab = fix_lower_surface(slab)
+        slab = parallel_displacement(slab, vacuum=SLAB_VACUUM)
+        slab = set_initial_magmoms(slab, kind="slab")
+
     optimized_slab = my_calculator(
         slab, "slab",
         calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
-    
+
     energy = optimized_slab.get_potential_energy()
     return optimized_slab, energy
 
@@ -321,7 +319,7 @@ def calculate_adsorption_on_site(
     elapsed_time = time.time() - start_time
 
     # Save results
-    output_file = os.path.join(site_directory, f"opt_slab_ads_{site}.xyz")
+    output_file = os.path.join(site_directory, f"opt_slab_ads_{site}.extxyz")
     write(output_file, slab_ads_calc)
     print(f"     E_total = {total_energy:.6f} eV, Time = {elapsed_time:.2f} s")
 
@@ -390,7 +388,7 @@ def calculate_adsorption_with_offset(
     total_energy = calculator.get_potential_energy()
 
     # Save relaxed geometry
-    output_file = Path(work_directory).with_suffix(".xyz")
+    output_file = Path(work_directory).with_suffix(".extxyz")
     write(output_file, calculator)
 
     elapsed_time = time.time() - start_time
@@ -464,7 +462,7 @@ def calculate_adsorption_with_indices(
 
     # Save results with descriptive filename
     indices_string = "_".join(map(str, atom_indices))
-    output_file = Path(work_directory).parent / f"idx_{indices_string}.xyz"
+    output_file = Path(work_directory).parent / f"idx_{indices_string}.extxyz"
     write(output_file, calculator)
 
     elapsed_time = time.time() - start_time
@@ -638,14 +636,14 @@ def search_adsorption_site(
     optimized_bulk, bulk_energy = optimize_bulk_structure(
         bulk, str(bulk_dir), calculator, yaml_path
     )
-    write(str(bulk_dir / "optimized_bulk.xyz"), optimized_bulk)
+    write(str(bulk_dir / "optimized_bulk.extxyz"), optimized_bulk)
 
     # 4. Slab optimization
     logger.info("Optimizing slab structure...")
     optimized_slab, slab_energy = optimize_slab_structure(
         optimized_bulk, str(slab_dir), calculator, yaml_path
     )
-    write(str(slab_dir / "optimized_slab.xyz"), optimized_slab)
+    write(str(slab_dir / "optimized_slab.extxyz"), optimized_slab)
 
     # 5. Dictionary to store overall results
     all_results: Dict[str, Any] = {
@@ -672,7 +670,7 @@ def search_adsorption_site(
 
         # 6.1. Gas phase molecule optimization
         gas_json = gas_dir / "opt_gas_result.json"
-        xyz_gas = gas_dir / "opt_gas.xyz"
+        xyz_gas = gas_dir / "opt_gas.extxyz"
 
         if gas_json.exists() and not overwrite:
             # Load from existing results
@@ -869,7 +867,7 @@ def attach_modifier_to_surface(
 
     # Check for existing gas calculation
     gas_json = gas_dir / "opt_result.json"
-    xyz_gas = gas_dir / "opt.xyz"
+    xyz_gas = gas_dir / "opt.extxyz"
 
     if gas_json.exists() and xyz_gas.exists() and not overwrite:
         # Load existing results
@@ -916,7 +914,7 @@ def attach_modifier_to_surface(
     key = f"ofst_{offset[0]}_{offset[1]}"
     work_dir = adsorption_dir / key
     adsorption_json = adsorption_dir / f"{key}.json"
-    adsorption_xyz = adsorption_dir / f"{key}.xyz"
+    adsorption_xyz = adsorption_dir / f"{key}.extxyz"
 
     if adsorption_json.exists() and adsorption_xyz.exists() and not overwrite:
         # Load existing results
