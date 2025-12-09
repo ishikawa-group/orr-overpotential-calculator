@@ -56,7 +56,7 @@ result = calc_orr_overpotential_modified(
     orr_adsorbates=orr_adsorbates,
     modify_adsorbates=modify_adsorbates,
     modify_offset=modify_offset,
-    yaml_path=yaml_path
+    vasp_yaml_path=yaml_path
 )
 
 # 必要な値を辞書から取得
