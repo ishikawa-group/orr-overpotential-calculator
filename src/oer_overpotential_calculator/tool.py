@@ -948,14 +948,14 @@ def create_oer_volcano_plot(
     # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
         "H2": 0.27, "H2O": 0.56,
-        "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
+        "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
     }
     # Calculate O2 ZPE from H2O and H2
     zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
     # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
-        "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+        "H2": 0.41 * T / 298.15, "H2O": 0.67 * T / 298.15,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
     # Calculate O2 entropy from H2O and H2
@@ -1175,13 +1175,13 @@ def create_trend_plot(
         # Zero-point energy corrections (eV)
         zpe = {
             "H2": 0.27, "H2O": 0.56,
-            "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
+            "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
         }
         zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
         # Entropy terms T*S (eV)
         entropy = {
-            "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+            "H2": 0.41 * T / 298.15, "H2O": 0.67 * T / 298.15,
             "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
         }
         entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
