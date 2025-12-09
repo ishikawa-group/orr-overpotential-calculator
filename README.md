@@ -60,6 +60,8 @@ result = calc_oer_overpotential(bulk=bulk, outdir="oer_result")
 print(f"OER overpotential: {result['eta']:.3f} V")
 ```
 
+* VASPを使う場合は、環境に合わせたVASP設定YAMLを用意してください（サンプル: `example/vasp/data/vasp.yaml`）。`vasp_yaml_path`引数で指定するか、環境変数`VASP_YAML_PATH`でパスを渡せます。
+
 ## Output
 
 * The package generates several output files in the specified `outdir`:

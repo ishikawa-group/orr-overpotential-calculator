@@ -39,7 +39,6 @@ from orr_overpotential_calculator.tool import (
 BASE_DIR = "result"
 
 # VASP configuration file path
-YAML_PATH = os.path.join(Path(__file__).parent, "data", "vasp.yaml")
 
 # Available adsorption sites
 SITES = ["ontop", "bridge", "fcc"] 
@@ -70,7 +69,7 @@ def optimize_gas_molecule(
     gas_box_size: float,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
     Optimize gas phase molecule structure and calculate energy.
@@ -109,7 +108,7 @@ def optimize_bulk_structure(
     bulk_atoms: Atoms,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
     Optimize bulk crystal structure and calculate energy.
@@ -142,7 +141,7 @@ def optimize_slab_structure(
     input_structure: Atoms,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH,
+    yaml_path: Optional[str] = None,
     prepare_slab: bool = True,
     ) -> Tuple[Atoms, float]:
     """
@@ -185,7 +184,7 @@ def optimize_cluster_structure(
     gas_box_size: float,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
     Optimize cluster structure and calculate energy.
@@ -221,7 +220,7 @@ def optimize_cluster_with_gas(
     cluster_gas: Atoms,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
     Optimize cluster with adsorbed gas molecules and calculate energy.
@@ -262,7 +261,7 @@ def calculate_adsorption_on_site(
     site: str,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: Optional[str] = None
     ) -> Tuple[float, float]:
     """
     Calculate adsorption energy at specified site.
@@ -332,7 +331,7 @@ def calculate_adsorption_with_offset(
     offset: Tuple[float, float],
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH,
+    yaml_path: Optional[str] = None,
     ) -> Tuple[float, float]:
     """
     Calculate adsorption energy with specified offset position.
@@ -404,7 +403,7 @@ def calculate_adsorption_with_indices(
     height: float = None,
     orientation: list = None,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH,
+    yaml_path: Optional[str] = None,
     ) -> Tuple[float, float]:
     """
     Calculate adsorption energy at site defined by atom indices.
@@ -478,7 +477,7 @@ def calculate_all_molecules(
     optimized_slab: Atoms,
     slab_energy: float,
     calculator: str = "mace",
-    yaml_path: str = YAML_PATH
+    yaml_path: Optional[str] = None
     ) -> Dict[str, Any]:
     """
     Calculate adsorption energies for all molecules in MOLECULES dictionary.

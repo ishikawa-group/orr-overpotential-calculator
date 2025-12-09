@@ -10,6 +10,24 @@ from ase.calculators.calculator import Calculator
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
 
 
+def resolve_vasp_yaml_path(yaml_path: Optional[str]) -> str:
+    """
+    Resolve VASP YAML path from argument or environment.
+    Raises a clear error if not provided.
+    """
+    if yaml_path:
+        path = Path(yaml_path)
+    else:
+        env_path = os.getenv("VASP_YAML_PATH")
+        if not env_path:
+            raise ValueError("VASP YAML path is not set. Provide vasp_yaml_path or set VASP_YAML_PATH.")
+        path = Path(env_path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"VASP YAML file not found: {path}")
+    return str(path)
+
+
 def convert_numpy_types(obj):
     """Convert NumPy types to standard Python types"""
     import numpy as np
@@ -267,7 +285,7 @@ def my_calculator(
         atoms,
         kind: str,
         calculator: str = "mace",
-        yaml_path: str = "data/vasp.yaml",
+        yaml_path: Optional[str] = None,
         calc_directory: str = "calc"
 ):
     """
@@ -277,7 +295,7 @@ def my_calculator(
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
         calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "fairchem" / "qe" - calculator type
-        yaml_path: Path to YAML configuration file
+        yaml_path: Path to YAML configuration file (or set VASP_YAML_PATH env var)
         calc_directory: Calculation directory for VASP
 
     Returns:
@@ -295,6 +313,8 @@ def my_calculator(
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
+
+        yaml_path = resolve_vasp_yaml_path(yaml_path)
 
         # Load YAML file directly
         try:
