@@ -2,9 +2,9 @@
 #$ -cwd
 #$ -l cpu_160=1
 #$ -l h_rt=24:00:00
-#$ -N ORR_Ir111_sample
-#$ -o ./example/Ir111/log/RPBE_output.log
-#$ -e ./example/Ir111/log/RPBE_error.log
+#$ -N ORR_sample
+#$ -o ./example/log/RPBE_output.log
+#$ -e ./example/log/RPBE_error.log
 
 # Load required modules
 module load intel
