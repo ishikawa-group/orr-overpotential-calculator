@@ -35,7 +35,7 @@ result = calc_orr_overpotential(
     log_level=log_level,
     calculator=calculator,
     adsorbates=orr_adsorbates,
-    yaml_path=yaml_path
+    vasp_yaml_path=yaml_path
 )
 
 # 必要な値を辞書から取得
