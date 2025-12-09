@@ -10,13 +10,13 @@ from ase.build import fcc111, fcc100
 # ORR過電圧計算関数をインポート
 from orr_overpotential_calculator import calc_orr_overpotential
 
-#---------------------
+# ---------------------
 # 引数の設定
-base_dir = "result/RPBE/Pt111"
-force = True
+outdir = "result/RPBE/Pt111"
+overwrite = True
 log_level = "INFO"
-calc_type = "vasp"
-#----------------
+calculator = "vasp"
+# ----------------
 
 bulk = fcc111("Pt", size=(3, 3, 4), a=4.0, vacuum=None, periodic=True)
 
@@ -28,10 +28,10 @@ orr_adsorbates: Dict[str, List[Tuple[float, float]]] = {
 
 eta = calc_orr_overpotential(
     bulk=bulk,
-    base_dir=base_dir,
-    force=force,
+    outdir=outdir,
+    overwrite=overwrite,
     log_level=log_level,
-    calc_type=calc_type,
+    calculator=calculator,
     adsorbates=orr_adsorbates,
 )
 

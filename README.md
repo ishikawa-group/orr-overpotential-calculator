@@ -1,6 +1,6 @@
 # ORR Overpotential Calculator
 
-* A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR).
+* A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR) and Oxygen Evolution Reaction (OER).
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@
 ### From GitHub Repository
 
 ```bash
-pip install git+https://github.com/ishikawa-group/orr_overpotential_calculator.git
+pip install git+https://github.com/ishikawa-group/orr-overpotential-calculator.git
 ```
 
 ### From Pre-built Wheel
@@ -33,7 +33,7 @@ pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
 
 ### General
 
-* Here's a minimal example to get you started:
+* Here's a minimal ORR example to get you started:
 
 ```python
 from ase.build import fcc111
@@ -48,6 +48,19 @@ eta = result["eta"]
 
 print(f"ORR overpotential: {eta:.3f} V")
 ```
+
+* OER workflows are available via `oer_overpotential_calculator`:
+
+```python
+from ase.build import fcc111
+from oer_overpotential_calculator import calc_oer_overpotential
+
+bulk = fcc111("Ir", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
+result = calc_oer_overpotential(bulk=bulk, outdir="oer_result")
+print(f"OER overpotential: {result['eta']:.3f} V")
+```
+
+* For VASP, provide your own VASP config YAML (sample: `example/vasp/data/vasp.yaml`). Pass its path via `vasp_yaml_path` or the environment variable `VASP_YAML_PATH`.
 
 ## Output
 

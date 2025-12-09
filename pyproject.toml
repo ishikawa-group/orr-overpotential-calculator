@@ -13,6 +13,7 @@ dependencies = [
     "torch-dftd",
     "ase",
     "pyqt5",
+    "pyyaml",
 ]
 
 [tool.setuptools]
@@ -20,6 +21,3 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-"orr_overpotential_calculator" = ["data/*.yaml"]

@@ -25,10 +25,10 @@ from ase.build import fcc111
 from orr_overpotential_calculator import calc_orr_overpotential
 
 # Parameter settings
-base_dir = str(Path(__file__).parent / "Pt111")
-force = True  # Overwrite existing calculations
-calc_type = "vasp"  # or "mattersim"
-yaml_path = str(Path(__file__).parent / "vasp.yaml")
+outdir = str(Path(__file__).parent / "Pt111")
+overwrite = True  # Overwrite existing calculations
+calculator = "vasp"  # or "mace"
+vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")
 
 # Create bulk structure (Pt fcc(111) surface calculation)
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
@@ -43,12 +43,12 @@ orr_adsorbates = {
 # Execute ORR overpotential calculation
 result = calc_orr_overpotential(
     bulk=bulk,
-    base_dir=base_dir,
-    force=force,
+    outdir=outdir,
+    overwrite=overwrite,
     log_level="INFO",
-    calc_type=calc_type,
+    calculator=calculator,
     adsorbates=orr_adsorbates,
-    yaml_path=yaml_path
+    vasp_yaml_path=vasp_yaml_path
 )
 
 # Display results
@@ -165,5 +165,4 @@ Adsorption sites are specified using fractional coordinates:
 
 1. Nørskov, J. K. et al. (2004). Origin of the Overpotential for Oxygen Reduction at a Fuel-Cell Cathode. *J. Phys. Chem. B*, 108, 17886-17892.
 2. Zhang, Q. & Asthagiri, A. (2019). Solvation effects on DFT predictions of ORR activity on metal surfaces. *Catal. Today*, 323, 35-43.
-
 
