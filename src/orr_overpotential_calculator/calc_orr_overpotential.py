@@ -803,7 +803,8 @@ def calc_cluster_orr_overpotential(
 
 def calc_orr_overpotential_modified(
     bulk: Atoms,
-    base_dir: str = "result/modified_surface",
+    outdir: str = "result/modified_surface",
+    base_dir: Optional[str] = None,
     overwrite: bool = False,
     log_level: str = "INFO",
     calculator: str = "mace",
@@ -818,7 +819,8 @@ def calc_orr_overpotential_modified(
 
     Args:
         bulk: Bulk crystal structure
-        base_dir: Base directory for calculation results
+        outdir: Base directory for calculation results
+        base_dir: Deprecated alias for outdir (if provided, it overrides outdir)
         overwrite: Force recalculation of existing results
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
@@ -849,13 +851,17 @@ def calc_orr_overpotential_modified(
     if modify_adsorbates is None or modify_offset is None:
         raise ValueError("Surface modifier molecules (modify_adsorbates) and adsorption positions (modify_offset) are required")
 
-    # Directory setup
-    base_path = Path(base_dir).resolve()
-    base_path.mkdir(parents=True, exist_ok=True)
+    # Directory setup (prefer outdir; allow legacy base_dir)
+    if base_dir and base_dir != outdir:
+        logger.warning("base_dir is deprecated; using base_dir value. Please switch to outdir.")
+        outdir = base_dir
+
+    outdir_path = Path(outdir).resolve()
+    outdir_path.mkdir(parents=True, exist_ok=True)
 
     # --- 1. Bulk optimization ---
     logger.info("Optimizing bulk structure...")
-    bulk_dir = base_path / "bulk"
+    bulk_dir = outdir_path / "bulk"
     bulk_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_bulk, bulk_energy = optimize_bulk_structure(
@@ -865,7 +871,7 @@ def calc_orr_overpotential_modified(
 
     # --- 2. Clean slab optimization ---
     logger.info("Optimizing clean slab structure...")
-    slab_dir = base_path / "slab"
+    slab_dir = outdir_path / "slab"
     slab_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_slab, slab_energy = optimize_slab_structure(
@@ -887,20 +893,20 @@ def calc_orr_overpotential_modified(
         modifier_name,
         modifier_molecule,
         modifier_offset,
-        base_path,
+        outdir_path,
         overwrite=overwrite,
         calculator=calculator,
         vasp_yaml_path=vasp_yaml_path
     )
 
     # Save modified slab
-    modified_slab_path = base_path / f"modified_slab_{modifier_name}.extxyz"
+    modified_slab_path = outdir_path / f"modified_slab_{modifier_name}.extxyz"
     modified_slab.write(str(modified_slab_path))
     logger.info(f"Saved modified slab structure: {modified_slab_path}")
 
     # --- 4. ORR-related molecule adsorption calculations (on modified surface) ---
     logger.info("Running ORR-related molecule calculations on modified surface...")
-    result_dir = base_path / "orr_on_modified_surface"
+    result_dir = outdir_path / "orr_on_modified_surface"
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # Perform ORR molecule adsorption calculations on modified slab
@@ -922,13 +928,13 @@ def calc_orr_overpotential_modified(
     overpotential = orr_results["eta"]
 
     # --- 6. Summary generation ---
-    with (base_path / "ORR_summary_modified_surface.txt").open("w") as f:
+    with (outdir_path / "ORR_summary_modified_surface.txt").open("w") as f:
         f.write(f"--- ORR Summary (Surface modifier: {modifier_name}) ---\n\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
         f.write(f"Overpotential η = {overpotential:.3f} V\n")
 
-    logger.info(f"Saved summary: {base_path / 'ORR_summary_modified_surface.txt'}")
+    logger.info(f"Saved summary: {outdir_path / 'ORR_summary_modified_surface.txt'}")
 
     # Return results including modifier information
     orr_results.update({

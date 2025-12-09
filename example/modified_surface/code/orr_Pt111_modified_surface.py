@@ -13,7 +13,7 @@ from orr_overpotential_calculator import calc_orr_overpotential_modified
 
 # ---------------------
 # 引数の設定
-base_dir = str(Path(__file__).parent.parent / "result/ORR/Pt111_CH3CN_test")
+outdir = str(Path(__file__).parent.parent / "result/ORR/Pt111_CH3CN_test")
 overwrite = True
 log_level = "INFO"
 calculator = "vasp"
@@ -49,7 +49,7 @@ modify_offset: Dict[str, List[Tuple[float, float]]] = {
 # 関数呼び出しの変更：辞書として結果を受け取る
 result = calc_orr_overpotential_modified(
     bulk=bulk,
-    base_dir=base_dir,
+    outdir=outdir,
     overwrite=overwrite,
     log_level=log_level,
     calculator=calculator,
