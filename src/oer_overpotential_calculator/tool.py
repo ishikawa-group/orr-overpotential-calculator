@@ -284,6 +284,8 @@ def auto_lmaxmix(atoms):
 def my_calculator(
         atoms,
         kind: str,
+        fmax: float = 0.05,
+        steps: int = 200,
         calculator: str = "mace",
         yaml_path: Optional[str] = None,
         calc_directory: str = "calc"
@@ -308,8 +310,8 @@ def my_calculator(
     calculator = calculator.lower()
 
     # optimizer options
-    fmax = 0.05
-    steps = 200
+    # fmax = 0.05
+    # steps = 200
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp

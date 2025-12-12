@@ -9,16 +9,11 @@ import json
 import time
 import logging
 
-import numpy as np
 from typing import Dict, Any, Tuple, List, Optional
 from pathlib import Path
 
-from ase import Atom, Atoms
-from ase.build import fcc111, bulk, add_adsorbate
-from ase.constraints import FixAtoms
-from ase.calculators.vasp import Vasp
-from ase.optimize import FIRE
-from ase.filters import FrechetCellFilter, ExpCellFilter
+from ase import Atoms
+from ase.build import add_adsorbate
 from ase.io import write
 
 # Add custom module path
@@ -33,7 +28,10 @@ from oer_overpotential_calculator.tool import (
 
 # ----------------------------------------------------------------------
 # Configuration Constants
-# ----------------------------------------------------------------------      
+# ----------------------------------------------------------------------
+
+FMAX = 0.05
+STEPS = 20
 
 # Base directory for calculation results
 BASE_DIR = "result"
@@ -97,7 +95,9 @@ def optimize_gas_molecule(
         molecule, "gas", 
         calculator=calculator,
         yaml_path=yaml_path, 
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax=FMAX,
+        steps=STEPS,
     )
     
     energy = optimized_molecule.get_potential_energy()
@@ -130,7 +130,9 @@ def optimize_bulk_structure(
         bulk_structure, "bulk",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
     
     energy = optimized_bulk.get_potential_energy()
@@ -165,7 +167,9 @@ def optimize_slab_structure(
         slab, "slab",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
     
     energy = optimized_slab.get_potential_energy()
@@ -202,7 +206,9 @@ def optimize_cluster_structure(
         cluster_atoms, "cluster",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
     
     energy = optimized_cluster.get_potential_energy()
@@ -237,7 +243,9 @@ def optimize_cluster_with_gas(
         cluster_gas_atoms, "cluster_gas",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
     
     energy = optimized_cluster_gas.get_potential_energy()
@@ -302,7 +310,9 @@ def calculate_adsorption_on_site(
         slab_with_adsorbate, "slab",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=site_directory
+        calc_directory=site_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
 
     total_energy = slab_ads_calc.get_potential_energy()
@@ -374,7 +384,9 @@ def calculate_adsorption_with_offset(
         "slab",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
     total_energy = calculator.get_potential_energy()
 
@@ -447,7 +459,9 @@ def calculate_adsorption_with_indices(
         kind="cluster_gas",
         calculator=calculator,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        fmax = FMAX,
+        steps = STEPS,
     )
     total_energy = calculator.get_potential_energy()
 
@@ -943,7 +957,9 @@ def attach_modifier_to_surface(
             kind="slab",
             calculator=calculator,
             yaml_path=yaml_path,
-            calc_directory=str(work_dir)
+            calc_directory=str(work_dir),
+            fmax=FMAX,
+            steps=STEPS,
         )
 
         # Energy calculation

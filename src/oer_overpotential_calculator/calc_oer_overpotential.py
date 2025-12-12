@@ -577,7 +577,6 @@ def get_overpotential_oer(
     }
 
 
-
 # ---------------------------------------------------------------------------
 # Main Workflow Functions
 # ---------------------------------------------------------------------------
@@ -677,12 +676,12 @@ def calc_oer_overpotential(
 
     # 4. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, slab_energy, solvent_correction_yaml_path)
-    orr_results = get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
-    overpotential = orr_results["eta"]
+    oer_results = get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
+    overpotential = oer_results["eta"]
 
-    # Add E_bulk to orr_results for external access
+    # Add E_bulk to oer_results for external access
     if bulk_energy is not None:
-        orr_results["E_bulk"] = float(bulk_energy)
+        oer_results["E_bulk"] = float(bulk_energy)
 
     # 5. Write summary
     with (outdir_path / "OER_summary.txt").open("w") as f:
@@ -696,7 +695,7 @@ def calc_oer_overpotential(
         f.write(f"Overpotential η = {overpotential:.3f} V\n")
     logger.info("Summary written → %s", outdir_path / "OER_summary.txt")
 
-    return orr_results
+    return oer_results
 
 
 def calc_cluster_oer_overpotential(
@@ -780,20 +779,20 @@ def calc_cluster_oer_overpotential(
 
     # 3. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, cluster_energy, solvent_correction_yaml_path)
-    orr_results = get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
+    oer_results = get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
 
     # Add cluster energy as E_bulk for consistency
-    orr_results["E_bulk"] = float(cluster_energy)
+    oer_results["E_bulk"] = float(cluster_energy)
 
     # 4. Write summary
     with (outdir_path / "OER_summary.txt").open("w") as f:
         f.write("--- OER Summary ---\n\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
-        f.write(f"Overpotential η = {orr_results['eta']:.3f} V\n")
+        f.write(f"Overpotential η = {oer_results['eta']:.3f} V\n")
     logger.info("Summary written → %s", outdir_path / "OER_summary.txt")
 
-    return orr_results
+    return oer_results
 
 
 def calc_oer_overpotential_modified(
@@ -803,7 +802,7 @@ def calc_oer_overpotential_modified(
     overwrite: bool = False,
     log_level: str = "INFO",
     calculator: str = "mace",
-    orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    oer_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     modify_adsorbates: Dict[str, Atoms] = None,
     modify_offset: Dict[str, List[Tuple[float, float]]] = None,
     vasp_yaml_path: str = None,
@@ -819,7 +818,7 @@ def calc_oer_overpotential_modified(
         overwrite: Force recalculation of existing results
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
-        orr_adsorbates: Adsorption sites for OER-related species
+        oer_adsorbates: Adsorption sites for OER-related species
         modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
         modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
         vasp_yaml_path: Path to VASP configuration file
@@ -839,8 +838,8 @@ def calc_oer_overpotential_modified(
     )
 
     # Set default values
-    if orr_adsorbates is None:
-        orr_adsorbates = ADSORBATES
+    if oer_adsorbates is None:
+        oer_adsorbates = ADSORBATES
 
     # Check modifier molecules and positions
     if modify_adsorbates is None or modify_offset is None:
@@ -911,16 +910,14 @@ def calc_oer_overpotential_modified(
         result_dir,
         overwrite=overwrite,
         calculator=calculator,
-        adsorbates=orr_adsorbates,
+        adsorbates=oer_adsorbates,
         vasp_yaml_path=vasp_yaml_path
     )
 
     # --- 5. Reaction energy and overpotential calculation ---
     reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy, solvent_correction_yaml_path)
-    orr_results = get_overpotential_oer(
-        reaction_energies, result_dir, verbose=True, save_plot=True
-    )
-    overpotential = orr_results["eta"]
+    oer_results = get_overpotential_oer(reaction_energies, result_dir, verbose=True, save_plot=True)
+    overpotential = oer_results["eta"]
 
     # --- 6. Summary generation ---
     with (outdir_path / "OER_summary_modified_surface.txt").open("w") as f:
@@ -932,10 +929,10 @@ def calc_oer_overpotential_modified(
     logger.info(f"Saved summary: {outdir_path / 'OER_summary_modified_surface.txt'}")
 
     # Return results including modifier information
-    orr_results.update({
+    oer_results.update({
         "modifier": modifier_name,
         "modifier_offset": modifier_offset,
         "E_bulk": float(bulk_energy),  # Add bulk energy for consistency
     })
 
-    return orr_results
+    return oer_results
