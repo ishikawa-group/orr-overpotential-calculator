@@ -150,26 +150,9 @@ def fix_lower_surface(atoms, gap_threshold=1.0):
     # Select atomic indices to fix
     fix_indices = [atom.index for atom in atom_fix if atom.tag in lower_layers]
 
-    # Apply FixAtoms constraint and preserve any existing constraints on the surface
+    # Apply FixAtoms constraint
     constraint = FixAtoms(indices=fix_indices)
-    existing_constraints = atom_fix.constraints
-
-    if existing_constraints:
-        constraints_list = list(existing_constraints) if isinstance(existing_constraints, (list, tuple)) else [existing_constraints]
-
-        # Merge with any existing FixAtoms constraints to avoid redundant, overlapping constraints
-        merged_fix_indices = set(fix_indices)
-        non_fix_constraints = []
-        for c in constraints_list:
-            if isinstance(c, FixAtoms):
-                merged_fix_indices.update(getattr(c, "index", getattr(c, "indices", [])))
-            else:
-                non_fix_constraints.append(c)
-
-        merged_constraints = non_fix_constraints + [FixAtoms(indices=sorted(merged_fix_indices))]
-        atom_fix.set_constraint(merged_constraints)
-    else:
-        atom_fix.set_constraint(constraint)
+    atom_fix.set_constraint(constraint)
 
     return atom_fix
 
@@ -800,12 +783,12 @@ def sort_atoms(atoms, axes=("z", "y", "x")):
 
 def generate_result_csv(
         materials_data: Dict[str, str],
-        output_csv: str = "orr_results.csv",
+        output_csv: str = "oer_results.csv",
         verbose: bool = False,
         solvent_correction_yaml_path: str = None,
     ) -> Optional[str]:
     """
-    Compile ORR calculation results for multiple materials into CSV file
+    Compile OER calculation results for multiple materials into CSV file
     
     Args:
         materials_data: Dictionary of material names and all_results.json paths 
@@ -820,8 +803,8 @@ def generate_result_csv(
     import json
     import csv
     from pathlib import Path
-    from orr_overpotential_calculator.calc_orr_overpotential import compute_reaction_energies, \
-        get_overpotential_orr
+    from oer_overpotential_calculator.calc_oer_overpotential import compute_reaction_energies, \
+        get_overpotential_oer
 
     # Data for CSV output
     csv_data = []
@@ -848,7 +831,7 @@ def generate_result_csv(
 
             # Calculate overpotential (set output_dir to None to avoid file output if needed)
             output_dir = Path(json_path).parent if verbose else None
-            orr_results = get_overpotential_orr(deltaEs, output_dir, verbose=verbose, save_plot=False)
+            orr_results = get_overpotential_oer(deltaEs, output_dir, verbose=verbose, save_plot=False)
 
             # Extract values from dictionary
             eta = orr_results["eta"]
@@ -884,7 +867,7 @@ def generate_result_csv(
                 "dG_eq_4": diffG_eq[3],
                 "U_L": U_L,
                 "Overpotential": eta,
-                "Limiting potential": 1.23 - eta,
+                "Limiting potential": U_L,
             }
 
             csv_data.append(row_data)
@@ -912,9 +895,9 @@ def generate_result_csv(
     return output_csv
 
 
-def create_orr_volcano_plot(
+def create_oer_volcano_plot(
         csv_file: Union[str, Path],
-        output_file: str = "orr_volcano.png",
+        output_file: str = "oer_volcano.png",
         x_column: str = "dG_OH",
         y_column: str = "Limiting potential",
         label_column: str = "Material",
@@ -925,7 +908,7 @@ def create_orr_volcano_plot(
         solvent_correction_yaml_path: str = None,
     ) -> str:
     """
-    Generate ORR volcano plot (dG_OH vs Limiting potential)
+    Generate OER volcano plot (dG_OH vs Limiting potential)
     
     Args:
         csv_file: Input CSV file path
@@ -965,14 +948,14 @@ def create_orr_volcano_plot(
     # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
         "H2": 0.27, "H2O": 0.56,
-        "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
+        "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
     }
     # Calculate O2 ZPE from H2O and H2
     zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
     # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
-        "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+        "H2": 0.41 * T / 298.15, "H2O": 0.67 * T / 298.15,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
     # Calculate O2 entropy from H2O and H2
@@ -1097,7 +1080,7 @@ def create_orr_volcano_plot(
     # Graph settings
     ax.set_xlabel(f'{x_column} (eV)', fontsize=14, fontweight='bold')
     ax.set_ylabel(f'{y_column} (V)', fontsize=14, fontweight='bold')
-    ax.set_title('ORR Volcano Plot', fontsize=16, fontweight='bold')
+    ax.set_title('OER Volcano Plot', fontsize=16, fontweight='bold')
     # Remove grid (グリッドを削除)
     # ax.grid(True, linestyle='--', alpha=0.6)
 
@@ -1192,13 +1175,13 @@ def create_trend_plot(
         # Zero-point energy corrections (eV)
         zpe = {
             "H2": 0.27, "H2O": 0.56,
-            "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
+            "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
         }
         zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
         # Entropy terms T*S (eV)
         entropy = {
-            "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+            "H2": 0.41 * T / 298.15, "H2O": 0.67 * T / 298.15,
             "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
         }
         entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
@@ -1456,11 +1439,11 @@ def plot_free_energy_diagram(
         material_name: Optional[str] = None,
 ) -> str:
     """
-    Generate combined free energy diagram for multiple materials from CSV data.
+    Generate combined OER free energy diagram for multiple materials from CSV data.
     Displays energy levels as horizontal lines connected by dashed lines.
     
     Args:
-        csv_file: Input CSV file path containing ORR calculation results
+        csv_file: Input CSV file path containing OER calculation results
         output_file: Output image filename
         equilibrium_potential: Equilibrium potential in V (default: 1.23 V)
         dpi: Image resolution
@@ -1489,11 +1472,11 @@ def plot_free_energy_diagram(
 
     # Reaction step labels
     labels = [
-        "O$_2$ + 2H$_2$",
+        "* + H$_2$O",
+        "OH* + 0.5H$_2$",
+        "O* + H$_2$",
         "OOH* + 1.5H$_2$",
-        "O* + H$_2$O + H$_2$",
-        "OH* + H$_2$O + 0.5H$_2$",
-        "* + 2H$_2$O"
+        "O$_2$ + * + 2H$_2$"
     ]
     steps = np.arange(5)  # 0, 1, 2, 3, 4
 
@@ -1626,10 +1609,10 @@ def plot_free_energy_diagram(
 
     # Title setting
     if material_name is not None:
-        plt.title(f"{material_name} - ORR Free Energy Diagram",
+        plt.title(f"{material_name} - OER Free Energy Diagram",
                   fontsize=14, fontweight='bold')
     else:
-        plt.title("4e⁻ ORR Free Energy Diagrams - Material Comparison",
+        plt.title("4e⁻ OER Free Energy Diagrams - Material Comparison",
                   fontsize=14, fontweight='bold')
 
     # Grid and legend

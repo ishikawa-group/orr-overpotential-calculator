@@ -1,6 +1,6 @@
 # ORR Overpotential Calculator
 
-* A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR).
+* A Python package for calculating overpotentials of the Oxygen Reduction Reaction (ORR) and Oxygen Evolution Reaction (OER).
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@
 ### From GitHub Repository
 
 ```bash
-pip install git+https://github.com/ishikawa-group/orr_overpotential_calculator.git
+pip install git+https://github.com/ishikawa-group/orr-overpotential-calculator.git
 ```
 
 ### From Pre-built Wheel
@@ -33,7 +33,7 @@ pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
 
 ### General
 
-* Here's a minimal example to get you started:
+* Here's a minimal ORR example to get you started:
 
 ```python
 from ase.build import fcc111
@@ -49,6 +49,19 @@ eta = result["eta"]
 print(f"ORR overpotential: {eta:.3f} V")
 ```
 
+* OER workflows are available via `oer_overpotential_calculator`:
+
+```python
+from ase.build import fcc111
+from oer_overpotential_calculator import calc_oer_overpotential
+
+bulk = fcc111("Ir", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
+result = calc_oer_overpotential(bulk=bulk, outdir="oer_result")
+print(f"OER overpotential: {result['eta']:.3f} V")
+```
+
+* For VASP, provide your own VASP config YAML (sample: `example/vasp/data/vasp.yaml`). Pass its path via `vasp_yaml_path` or the environment variable `VASP_YAML_PATH`.
+
 ## Output
 
 * The package generates several output files in the specified `outdir`:
@@ -62,7 +75,7 @@ print(f"ORR overpotential: {eta:.3f} V")
 
 * The calculated free energy diagram shows the reaction pathway for the oxygen reduction reaction:
 
-<img src="example/surface/result/ORR_free_energy_diagram_test.png" width="80%">
+<img src="pt_free_energy.png" width="80%">
 
 *Figure: Example of the automatically generated free energy diagram showing the 4-electron ORR pathway on a catalyst surface.*
 
@@ -83,7 +96,8 @@ outdir = str(Path(__file__).parent / "Pt111")
 overwrite = True  # Overwrite existing calculations
 log_level = "INFO"
 calculator = "mace"
-yaml_path = str(Path(__file__).parent / "vasp.yaml")
+vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")
+solvent_correction_yaml_path = str(Path(__file__).parent / "solvent_correction.yaml")  # Optional
 
 # Create bulk structure
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
@@ -103,7 +117,8 @@ result = calc_orr_overpotential(
     log_level=log_level,
     calculator=calculator,
     adsorbates=orr_adsorbates,
-    yaml_path=yaml_path
+    vasp_yaml_path=vasp_yaml_path,
+    solvent_correction_yaml_path=solvent_correction_yaml_path
 )
 
 # Extract results
@@ -114,7 +129,8 @@ limiting_potential = result["U_L"]
 print(f"ORR overpotential: {eta:.3f} V")
 print(f"Limiting potential: {limiting_potential:.3f} V")
 ```
-* "vasp" can be also used as `calculator`.
+* "vasp" can also be used as `calculator`.
+* `solvent_correction_yaml_path` applies solvation corrections to adsorbate energies (default: O: 0, OOH: 0.25, OH: 0.5 eV).
 
 ### Custom Adsorption Sites
 
@@ -147,13 +163,27 @@ print(f"ORR overpotential (custom sites): {eta:.3f} V")
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `bulk` | `Atoms` | Required | ASE Atoms object representing the bulk structure |
-| `outdir` | `str` | `"result/matter_sim"` | Directory for saving calculation results |
+| `bulk` | `Atoms` \| `None` | `None` | ASE Atoms object representing the bulk structure; required unless using a provided slab (set to `None` when `opt_bulk=False` and supplying `surface`) |
+| `outdir` | `str` | `"result"` | Directory for saving calculation results |
 | `overwrite` | `bool` | `False` | Whether to overwrite existing calculations |
 | `log_level` | `str` | `"INFO"` | Logging level ("DEBUG", "INFO", "WARNING", "ERROR") |
-| `calculator` | `str` | `"mace"` | Calculator type ("vasp", "mace") |
+| `calculator` | `str` | `"mace"` | Calculator type ("vasp", "mace", "mace-d3") |
 | `adsorbates` | `Dict` | `None` | Custom adsorption site definitions (optional) |
-| `yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
+| `vasp_yaml_path` | `str` | `None` | Path to VASP configuration file (required for VASP) |
+| `solvent_correction_yaml_path` | `str` | `None` | Path to solvent correction YAML file (optional) |
+| `opt_bulk` | `bool` | `True` | Whether to optimize the bulk structure before slab generation; set `False` to skip bulk optimization when providing a pre-built `surface` |
+| `surface` | `Atoms` \| `None` | `None` | Pre-built slab structure to use when `opt_bulk=False` |
+
+### Workflow when starting from a provided slab
+
+When `opt_bulk=False` and a slab `surface` is supplied, the workflow skips bulk optimization; the provided surface feeds directly into slab optimization. The steps are:
+
+* In this mode the `bulk` argument can be `None`; the provided `surface` becomes the starting point.
+
+1. **Use provided slab as input for slab optimization** – the given `surface` is used directly as input for slab optimization (bulk directories are not created for non-VASP runs when `opt_bulk=False`).
+2. **Optimize the clean slab** – `optimize_slab_structure` runs on the provided surface, applying slab preparation operations (such as constraint application, vacuum adjustment, and energy relaxation), and records its energy in `slab/optimized_slab.extxyz`.
+3. **Run gas-phase and adsorption calculations** – `calculate_required_molecules` evaluates gas-phase and adsorbed intermediates on the optimized slab, using the slab energy in place of any bulk reference.
+4. **Compute reaction energies and overpotential** – `compute_reaction_energies` and `get_overpotential_orr` derive ΔE values, limiting potential, and overpotential, writing summaries without bulk energy entries.
 
 ## Output Files
 
