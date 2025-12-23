@@ -10,7 +10,7 @@ requires-python = ">=3.9"
 dependencies = [
     "matplotlib",
     "pandas",
-    "mace-torch==0.3.13",
+    "mace-torch==0.3.14",
     "torch-dftd",
     "ase",
     "pyqt5",
