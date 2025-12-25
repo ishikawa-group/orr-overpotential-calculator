@@ -734,7 +734,7 @@ def set_initial_magmoms(atoms, kind: str = "bulk", formula: str = None):
     """
     # Define constants within function
     MAGNETIC_ELEMENTS = ["Mn", "Fe", "Cr", "Ni"]  # Initial magnetic moment 1.0 μB
-    CLOSED_SHELL_MOLECULES = ["H2", "H2O"]  # Molecules calculated with spin unpolarized
+    CLOSED_SHELL_MOLECULES = ["H2", "H2O", "Cl2"]  # Molecules calculated with spin unpolarized
 
     symbols = atoms.get_chemical_symbols()
 
@@ -783,17 +783,19 @@ def sort_atoms(atoms, axes=("z", "y", "x")):
 
 def generate_result_csv(
         materials_data: Dict[str, str],
-        output_csv: str = "oer_results.csv",
+        output_csv: str = "cer_results.csv",
+        intermediate: str = "Cl*",
         verbose: bool = False,
         solvent_correction_yaml_path: str = None,
     ) -> Optional[str]:
     """
-    Compile OER calculation results for multiple materials into CSV file
+    Compile CER calculation results for multiple materials into CSV file
     
     Args:
         materials_data: Dictionary of material names and all_results.json paths 
                        {'Pt111': 'path/to/Pt111/all_results.json', ...}
         output_csv: Output CSV file path
+        intermediate: "Cl*" or "OCl*" (passed to CER overpotential/plot routines)
         verbose: Whether to show detailed output
         solvent_correction_yaml_path: Path to solvent correction YAML file
         
@@ -803,8 +805,11 @@ def generate_result_csv(
     import json
     import csv
     from pathlib import Path
-    from oer_overpotential_calculator.calc_oer_overpotential import compute_reaction_energies, \
-        get_overpotential_oer
+    from cer_overpotential_calculator.calc_oer_overpotential import (
+        compute_reaction_energies,
+        get_overpotential_cer,
+        CER_EQUILIBRIUM_POTENTIAL,
+    )
 
     # Data for CSV output
     csv_data = []
@@ -822,8 +827,8 @@ def generate_result_csv(
             print(f"Error loading {json_path}: {e}")
             continue
 
-        # Get slab energy
-        E_slab = results["OH"]["E_slab"]
+        # Get slab energy (stored under "Cl")
+        E_slab = results["Cl"]["E_slab"]
 
         # Calculate reaction energies
         try:
@@ -831,40 +836,36 @@ def generate_result_csv(
 
             # Calculate overpotential (set output_dir to None to avoid file output if needed)
             output_dir = Path(json_path).parent if verbose else None
-            orr_results = get_overpotential_oer(deltaEs, output_dir, verbose=verbose, save_plot=False)
+            cer_results = get_overpotential_cer(
+                deltaEs,
+                output_dir,
+                intermediate=intermediate,
+                verbose=verbose,
+                save_plot=False,
+                equilibrium_potential=CER_EQUILIBRIUM_POTENTIAL,
+            )
 
             # Extract values from dictionary
-            eta = orr_results["eta"]
-            diffG_U0 = orr_results["diffG_U0"]
-            diffG_eq = orr_results["diffG_eq"]
-            U_L = orr_results["U_L"]
+            eta = cer_results["eta"]
+            diffG_U0 = cer_results["diffG_U0"]
+            diffG_eq = cer_results["diffG_eq"]
+            U_L = cer_results["U_L"]
 
-            # Extract adsorption energies
-            E_ads_OOH = results.get("HO2", {}).get("E_ads_best", None)
-            E_ads_O = results.get("O", {}).get("E_ads_best", None)
-            E_ads_OH = results.get("OH", {}).get("E_ads_best", None)
+            # Extract adsorption energy (relative to 1/2 Cl2)
+            E_ads_Cl = results.get("Cl", {}).get("E_ads_best_vs_half_Cl2", None)
 
             # Create row data
             row_data = {
                 "Material": material_name,
+                "Intermediate": intermediate,
                 "E_slab": E_slab,
-                "E_H2_g": energies["E_H2_g"],
-                "E_H2O_g": energies["E_H2O_g"],
-                "E_O2_g": energies["E_O2_g"],
-                "E_slab_OOH": energies["E_slab_OOH"],
-                "E_slab_O": energies["E_slab_O"],
-                "E_slab_OH": energies["E_slab_OH"],
-                "E_ads_OOH": E_ads_OOH,
-                "E_ads_O": E_ads_O,
-                "E_ads_OH": E_ads_OH,
+                "E_Cl2_g": energies["E_Cl2_g"],
+                "E_slab_Cl": energies["E_slab_Cl"],
+                "E_ads_Cl_vs_half_Cl2": E_ads_Cl,
                 "dG1": diffG_U0[0],
                 "dG2": diffG_U0[1],
-                "dG3": diffG_U0[2],
-                "dG4": diffG_U0[3],
                 "dG_eq_1": diffG_eq[0],
                 "dG_eq_2": diffG_eq[1],
-                "dG_eq_3": diffG_eq[2],
-                "dG_eq_4": diffG_eq[3],
                 "U_L": U_L,
                 "Overpotential": eta,
                 "Limiting potential": U_L,
@@ -1430,8 +1431,9 @@ def place_adsorbate(cluster, adsorbate, indices, height=None, orientation=None):
 
 def plot_free_energy_diagram(
         csv_file: Union[str, Path],
-        output_file: str = "free_energy_diagram.png",
-        equilibrium_potential: float = 1.23,
+        output_file: str = "free_energy_diagram_cer.png",
+        equilibrium_potential: float = 1.358,
+        intermediate: str = "Cl*",
         dpi: int = 300,
         figsize: tuple = (10, 8),
         show_u0: bool = True,
@@ -1439,17 +1441,18 @@ def plot_free_energy_diagram(
         material_name: Optional[str] = None,
 ) -> str:
     """
-    Generate combined OER free energy diagram for multiple materials from CSV data.
+    Generate combined CER free energy diagram for multiple materials from CSV data.
     Displays energy levels as horizontal lines connected by dashed lines.
     
     Args:
-        csv_file: Input CSV file path containing OER calculation results
+        csv_file: Input CSV file path containing CER calculation results
         output_file: Output image filename
-        equilibrium_potential: Equilibrium potential in V (default: 1.23 V)
+        equilibrium_potential: Equilibrium potential in V (default: 1.358 V)
+        intermediate: "Cl*" or "OCl*" (controls diagram labels)
         dpi: Image resolution
         figsize: Figure size (width, height) in inches
         show_u0: Whether to show U=0V profiles
-        show_ueq: Whether to show U=1.23V profiles
+        show_ueq: Whether to show U=Ueq profiles
         material_name: Optional specific material name to plot (from CSV)
         
     Returns:
@@ -1470,15 +1473,16 @@ def plot_free_energy_diagram(
             raise ValueError(f"Material '{material_name}' not found in CSV file")
         df = filtered_df
 
-    # Reaction step labels
-    labels = [
-        "* + H$_2$O",
-        "OH* + 0.5H$_2$",
-        "O* + H$_2$",
-        "OOH* + 1.5H$_2$",
-        "O$_2$ + * + 2H$_2$"
-    ]
-    steps = np.arange(5)  # 0, 1, 2, 3, 4
+    intermediate_norm = intermediate.strip()
+    if intermediate_norm not in {"Cl*", "OCl*"}:
+        raise ValueError("intermediate must be 'Cl*' or 'OCl*'")
+
+    labels = (
+        ["* + Cl$^-$", "Cl*", "* + Cl$_2$(g)"]
+        if intermediate_norm == "Cl*"
+        else ["O* + Cl$^-$", "OCl*", "O* + Cl$_2$(g)"]
+    )
+    steps = np.arange(3)  # 0, 1, 2
 
     # Color palette for materials
     if material_name is not None:
@@ -1500,19 +1504,15 @@ def plot_free_energy_diagram(
     # Process each material
     for idx, (_, row) in enumerate(df.iterrows()):
         material_name_row = row["Material"]
-        limiting_potential = row["Limiting potential"]
+        limiting_potential = float(row.get("U_L", row.get("Limiting potential")))
 
         # Extract pre-calculated dG values from CSV
-        dg_u0 = np.array([row["dG1"], row["dG2"], row["dG3"], row["dG4"]])
-        dg_eq = np.array([row["dG_eq_1"], row["dG_eq_2"], row["dG_eq_3"], row["dG_eq_4"]])
+        dg_u0 = np.array([row["dG1"], row["dG2"]], dtype=float)
+        dg_eq = np.array([row["dG_eq_1"], row["dG_eq_2"]], dtype=float)
 
-        # Calculate dG_UL using U_L (Limiting potential)
-        dg_ul = dg_u0 + limiting_potential
-
-        # Free energy profiles (cumulative sum starting from 0)
         g_profile_u0 = np.concatenate(([0.0], np.cumsum(dg_u0)))
         g_profile_ueq = np.concatenate(([0.0], np.cumsum(dg_eq)))
-        g_profile_ul = np.concatenate(([0.0], np.cumsum(dg_ul)))
+        g_profile_ul = g_profile_u0 - steps * limiting_potential
 
         # Shift profiles so final state is at 0
         g0_shift = g_profile_u0 - g_profile_u0[-1]
@@ -1534,12 +1534,12 @@ def plot_free_energy_diagram(
         # Labels for legend
         if material_name is not None:
             u0_label = "U = 0V" if show_u0 else None
-            ueq_label = f"U = {equilibrium_potential}V" if show_ueq else None
-            ul_label = f"U$_{{L}}$ = {limiting_potential:.2f}V"
+            ueq_label = f"U = {equilibrium_potential:.3f}V" if show_ueq else None
+            ul_label = f"U$_{{L}}$ = {limiting_potential:.3f}V"
         else:
             u0_label = f"{material_name_row} (U=0V)" if show_u0 else None
-            ueq_label = f"{material_name_row} (U={equilibrium_potential}V)" if show_ueq else None
-            ul_label = f"{material_name_row} (U$_{{L}}$={limiting_potential:.2f}V)"
+            ueq_label = f"{material_name_row} (U={equilibrium_potential:.3f}V)" if show_ueq else None
+            ul_label = f"{material_name_row} (U$_{{L}}$={limiting_potential:.3f}V)"
 
         # ------ U=0V profile ------
         if show_u0:
@@ -1603,16 +1603,16 @@ def plot_free_energy_diagram(
                      markersize=6, linestyle='none')
 
     # Formatting
-    plt.xticks(steps, labels, rotation=15, ha='right')
+    plt.xticks(steps, labels, rotation=0)
     plt.ylabel("ΔG (eV)", fontsize=12, fontweight='bold')
     plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
 
     # Title setting
     if material_name is not None:
-        plt.title(f"{material_name} - OER Free Energy Diagram",
+        plt.title(f"{material_name} - CER Free Energy Diagram",
                   fontsize=14, fontweight='bold')
     else:
-        plt.title("4e⁻ OER Free Energy Diagrams - Material Comparison",
+        plt.title("2e⁻ CER Free Energy Diagrams - Material Comparison",
                   fontsize=14, fontweight='bold')
 
     # Grid and legend

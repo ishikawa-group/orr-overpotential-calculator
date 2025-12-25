@@ -33,6 +33,12 @@ ENV/
 # example ディレクトリ内のファイル管理
 example/*/result
 
+# CER example: keep top-level summary artifacts, ignore heavy per-calculator outputs
+!example/cer/result/
+!example/cer/result/*.csv
+!example/cer/result/*.png
+example/cer/result/esen-oc25/
+
 example/nanoparticle/
 example/surface_2/
 example/surface_test/
