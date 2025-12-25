@@ -36,6 +36,38 @@ from oer_overpotential_calculator import calc_oer_overpotential
 from cer_overpotential_calculator import calc_cer_overpotential
 
 
+def _plot_oer_vs_cer(rows: List[dict], plot_path: Path, title_suffix: str) -> None:
+    import matplotlib.pyplot as plt
+
+    xs = [float(r["eta_OER"]) for r in rows]
+    ys = [float(r.get("eta_CER_OCl*", r.get("eta_CER"))) for r in rows]
+    labels = [str(r["Material"]) for r in rows]
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.scatter(xs, ys, s=90)
+    for x, y, label in zip(xs, ys, labels):
+        ax.annotate(label, (x, y), textcoords="offset points", xytext=(6, 4), ha="left")
+
+    lo = float(min(min(xs), min(ys)))
+    hi = float(max(max(xs), max(ys)))
+    pad = 0.05 * (hi - lo) if hi > lo else 0.1
+    lo -= pad
+    hi += pad
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal", adjustable="box")
+    ax.plot([lo, hi], [lo, hi], color="red", linestyle="--", linewidth=1.5, alpha=0.9)
+
+    ax.set_xlabel("OER overpotential η (V)")
+    ax.set_ylabel("CER overpotential η (OCl*) (V)")
+    ax.set_title(f"OER vs CER ({title_suffix})")
+    ax.grid(True, linestyle=":", alpha=0.4)
+    fig.tight_layout()
+    fig.savefig(plot_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved plot: {plot_path}")
+
+
 def _align_supercell_by_top_metal(supercell, target_o_index: int | None) -> None:
     symbols = supercell.get_chemical_symbols()
     metal_indices = [i for i, s in enumerate(symbols) if s != "O"]
@@ -135,6 +167,11 @@ def main() -> int:
     )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing results")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Skip calculations and regenerate plot from existing oer_cer_summary.csv in outdir.",
+    )
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir).expanduser().resolve()
@@ -151,6 +188,27 @@ def main() -> int:
     }
 
     summary_rows: List[dict] = []
+
+    # Plot-only mode: replot from CSV without re-running calculations
+    if args.plot_only:
+        csv_path = outdir / "oer_cer_summary.csv"
+        if not csv_path.exists():
+            raise FileNotFoundError(f"Summary CSV not found for --plot-only: {csv_path}")
+        with csv_path.open("r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            summary_rows = [row for row in reader]
+        if not summary_rows:
+            raise ValueError(f"No rows found in {csv_path}")
+
+        calculators = {r.get("Calculator", "") for r in summary_rows}
+        title_suffix = (
+            next(iter(calculators))
+            if len(calculators) == 1 and next(iter(calculators))
+            else args.calculator
+        )
+        plot_path = outdir / "oer_vs_cer.png"
+        _plot_oer_vs_cer(summary_rows, plot_path, title_suffix=title_suffix)
+        return 0
 
     if args.materials is None:
         formulas = sorted(p.stem.replace("_opt_bulk", "") for p in data_dir.glob("*_opt_bulk.xyz"))
@@ -223,25 +281,7 @@ def main() -> int:
     # Plot: x=η_OER, y=η_CER_min
     plot_path = outdir / "oer_vs_cer.png"
     if summary_rows:
-        import matplotlib.pyplot as plt
-
-        xs = [r["eta_OER"] for r in summary_rows]
-        ys = [r["eta_CER_OCl*"] for r in summary_rows]
-        labels = [r["Material"] for r in summary_rows]
-
-        plt.figure(figsize=(7, 6))
-        plt.scatter(xs, ys, s=90)
-        for x, y, label in zip(xs, ys, labels):
-            plt.annotate(label, (x, y), textcoords="offset points", xytext=(6, 4), ha="left")
-
-        plt.xlabel("OER overpotential η (V)")
-        plt.ylabel("CER overpotential η (OCl*) (V)")
-        plt.title(f"OER vs CER ({args.calculator})")
-        plt.grid(True, linestyle=":", alpha=0.4)
-        plt.tight_layout()
-        plt.savefig(plot_path, dpi=300)
-        plt.close()
-        print(f"Saved plot: {plot_path}")
+        _plot_oer_vs_cer(summary_rows, plot_path, title_suffix=args.calculator)
 
     return 0
 
