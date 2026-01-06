@@ -326,7 +326,7 @@ def my_calculator(
 
     # optimizer options
     fmax = 0.05
-    steps = 200
+    steps = 300
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
