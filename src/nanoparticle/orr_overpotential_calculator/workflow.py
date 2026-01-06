@@ -297,12 +297,23 @@ def calc_nanoparticle_orr_overpotential_from_target(
 
     E_H2 = _gas_energy("H2")
     E_H2O = _gas_energy("H2O")
-    E_O = _gas_energy("O")
-    E_OH = _gas_energy("OH")
-    E_HO2 = _gas_energy("HO2")  # HO2 = OOH
 
-    # Provide O2 for completeness (not used directly; corrected in compute_reaction_energies).
-    _ = _gas_energy("O2")
+    # Derive all other gas references from H2/H2O (CHE-style) so we do not depend on
+    # gas-phase O/OH/OOH energetics.
+    #
+    # Define elemental chemical potentials:
+    #   μ_H = 1/2 E(H2)
+    #   μ_O = E(H2O) - 2 μ_H = E(H2O) - E(H2)
+    #
+    # Then:
+    #   E_gas(OH)  = μ_O + μ_H = E(H2O) - 1/2 E(H2)
+    #   E_gas(OOH) = 2 μ_O + μ_H = 2 E(H2O) - 3/2 E(H2)
+    E_O = float(E_H2O - E_H2)
+    E_OH = float(E_H2O - 0.5 * E_H2)
+    E_HO2 = float(2.0 * E_H2O - 1.5 * E_H2)  # HO2 = OOH
+
+    # Keep O2 reference for bookkeeping using the same correction used in the ORR code.
+    E_O2 = float(2.0 * (2.46 + E_H2O - E_H2))
 
     # ------------------------------------------------------------------
     # 3) Coverage sampling per species
@@ -456,7 +467,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     effective = {
         "H2": {"E_gas": float(E_H2)},
         "H2O": {"E_gas": float(E_H2O)},
-        "O2": {"E_gas": float(_gas_energy("O2"))},
+        "O2": {"E_gas": float(E_O2)},
         "O": {
             "E_gas": float(E_O),
             "E_total_best": float(clean_energy + E_O + per_species["O"]["chosen_E_ads_eV_per_site"]),
