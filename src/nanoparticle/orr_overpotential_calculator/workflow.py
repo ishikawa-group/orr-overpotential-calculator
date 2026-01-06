@@ -54,10 +54,8 @@ def _validate_clean_prefix(clean: Atoms, one_ml: Atoms, *, label: str) -> None:
         raise ValueError(f"{label} must contain at least the clean nanoparticle atoms.")
     if one_ml.get_chemical_symbols()[:n] != clean.get_chemical_symbols():
         raise ValueError(f"{label} does not start with the same atom ordering as clean_nanoparticle.")
-    pos_a = np.asarray(clean.get_positions(), float)
-    pos_b = np.asarray(one_ml.get_positions()[:n], float)
-    if not np.allclose(pos_a, pos_b, atol=1e-3):
-        raise ValueError(f"{label} first {n} atom positions do not match clean_nanoparticle (atol=1e-3).")
+    # We only require that the first `n` atoms correspond to the clean nanoparticle
+    # ordering; positions may differ (e.g., if each structure was optimized separately).
 
 
 def _connected_components(
