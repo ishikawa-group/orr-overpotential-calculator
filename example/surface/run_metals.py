@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from surface.orr_overpotential_calculator import calc_orr_overpotential
 
 metals = ["Ni"]
 # metals = ["Ni", "Cu", "Rh", "Pd", "Ag", "Ir", "Pt", "Au"]

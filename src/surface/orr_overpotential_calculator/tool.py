@@ -820,7 +820,7 @@ def generate_result_csv(
     import json
     import csv
     from pathlib import Path
-    from orr_overpotential_calculator.calc_orr_overpotential import compute_reaction_energies, \
+    from .calc_orr_overpotential import compute_reaction_energies, \
         get_overpotential_orr
 
     # Data for CSV output

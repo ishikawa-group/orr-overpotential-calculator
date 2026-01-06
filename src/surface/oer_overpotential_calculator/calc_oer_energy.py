@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate energies of the ORR reaction
+Calculate energies of the OER reaction
 """
 
 import os
@@ -22,7 +22,7 @@ from ase.filters import FrechetCellFilter, ExpCellFilter
 from ase.io import write
 
 # Add custom module path
-from orr_overpotential_calculator.tool import (
+from .tool import (
     parallel_displacement,
     fix_lower_surface,
     set_initial_magmoms,
@@ -57,7 +57,7 @@ MOLECULES = {
 # Structural parameters (all in Angstroms)
 SLAB_VACUUM = 15.0      # Vacuum layer thickness for slab calculations
 GAS_BOX = 15.0          # Box size for gas phase calculations
-ADSORBATE_HEIGHT = 2.0  # Initial height of adsorbate above surface
+ADSORBATE_HEIGHT = 0.5  # Initial height of adsorbate above surface
 
 # ----------------------------------------------------------------------
 # Optimization Functions
@@ -138,43 +138,36 @@ def optimize_bulk_structure(
 
 
 def optimize_slab_structure(
-    input_structure: Atoms,
+    optimized_bulk: Atoms,
     work_directory: str,
     calculator: str = "mace",
-    yaml_path: Optional[str] = None,
-    prepare_slab: bool = True,
+    yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
-    Optimize a slab structure (generated from bulk or provided directly).
-
+    Create and optimize slab structure from bulk and calculate energy.
+    
     Args:
-        input_structure: Slab input structure. Typically generated from an optimized
-            bulk but can also be a user-provided slab.
+        optimized_bulk: Optimized bulk structure
         work_directory: Directory for calculation files
         calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
-        prepare_slab: Whether to apply slab-preparation steps (fixing lower layers
-            and adding vacuum). Defaults to True for bulk-generated slabs; set to
-            False when the input slab is already prepared.
-
+        
     Returns:
         Tuple of optimized slab Atoms object and energy (eV)
     """
-    slab = input_structure.copy()
+    slab = optimized_bulk.copy()
     slab.set_pbc(True)
-
-    if prepare_slab:
-        slab = fix_lower_surface(slab)
-        slab = parallel_displacement(slab, vacuum=SLAB_VACUUM)
-        slab = set_initial_magmoms(slab, kind="slab")
-
+    slab = fix_lower_surface(slab)
+    slab = parallel_displacement(slab, vacuum=SLAB_VACUUM)
+    slab = set_initial_magmoms(slab, kind="slab")
+    
     optimized_slab = my_calculator(
         slab, "slab",
         calculator=calculator,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
-
+    
     energy = optimized_slab.get_potential_energy()
     return optimized_slab, energy
 
@@ -372,7 +365,6 @@ def calculate_adsorption_with_offset(
     add_adsorbate(
         slab_with_adsorbate, adsorbate,
         ADSORBATE_HEIGHT,
-        position="ontop",
         offset=offset
     )
 

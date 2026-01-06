@@ -27,7 +27,7 @@ from ase.build import fcc111, add_adsorbate
 from ase.io import read, write
 
 # External helper functions
-from oer_overpotential_calculator.calc_oer_energy import (
+from .calc_oer_energy import (
     optimize_bulk_structure,
     optimize_slab_structure,
     optimize_gas_molecule,
