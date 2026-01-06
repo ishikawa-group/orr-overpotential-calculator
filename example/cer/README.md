@@ -11,8 +11,8 @@ For each rutile `MO2` bulk structure (`*_opt_bulk.xyz`) it builds two slabs:
 
 Then it computes:
 
-- OER overpotential `η_OER` on the **vacancy** slab (via `oer_overpotential_calculator.calc_oer_overpotential`)
-- CER overpotential `η_CER(OCl*)` on the **full-coverage** slab (via `cer_overpotential_calculator.calc_cer_overpotential(intermediate="OCl*")`)
+- OER overpotential `η_OER` on the **vacancy** slab (via `surface.oer_overpotential_calculator.calc_oer_overpotential`)
+- CER overpotential `η_CER(OCl*)` on the **full-coverage** slab (via `surface.cer_overpotential_calculator.calc_cer_overpotential(intermediate="OCl*")`)
 
 ## How to run
 
@@ -63,4 +63,3 @@ Per-material calculation outputs are written under:
 Lower-left is generally “better” (low overpotential for both reactions).
 
 <img src="result/oer_vs_cer.png" width="80%">
-
