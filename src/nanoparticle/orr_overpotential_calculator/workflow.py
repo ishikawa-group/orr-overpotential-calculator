@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -248,6 +249,28 @@ def _write_extxyz(path: Path, atoms: Atoms, *, energy: float | None = None) -> N
     ase_write(str(path), out, format="extxyz")
 
 
+def _is_finite_atoms(atoms: Atoms) -> bool:
+    try:
+        pos = np.asarray(atoms.get_positions(), dtype=float)
+        return bool(np.isfinite(pos).all())
+    except Exception:
+        return False
+
+
+def _cuda_cleanup() -> None:
+    import gc
+
+    gc.collect()
+    try:  # pragma: no cover - optional torch
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:
+        return
+
+
 def calc_nanoparticle_orr_overpotential_from_target(
     *,
     clean_nanoparticle: AtomsLike,
@@ -388,55 +411,117 @@ def calc_nanoparticle_orr_overpotential_from_target(
         sample_idx: int,
         seed: int,
         n_ads: int,
-    ) -> CoverageSampleResult:
+    ) -> tuple[CoverageSampleResult | None, Dict[str, Any]]:
         work_dir = structures_dir / species / f"cov_{cov:g}" / f"sample_{sample_idx:03d}"
         work_dir.mkdir(parents=True, exist_ok=True)
         done = work_dir / ".done"
         meta = work_dir / "result.json"
         relaxed_path = work_dir / "relaxed.extxyz"
-        if done.exists() and meta.exists() and relaxed_path.exists() and not overwrite:
+        if done.exists() and meta.exists() and not overwrite:
             payload = json.load(meta.open())
-            return CoverageSampleResult(
-                coverage=float(cov),
-                sample_idx=int(payload["sample_idx"]),
-                seed=int(payload["seed"]),
-                n_ads=int(payload["n_ads"]),
-                energy_eV=float(payload["energy_eV"]),
-                relaxed_path=str(relaxed_path),
-            )
+            status = str(payload.get("status", "ok"))
+            optimizer_used = str(payload.get("optimizer", optimizer))
+            record: Dict[str, Any] = {
+                "coverage": float(cov),
+                "sample_idx": int(payload.get("sample_idx", sample_idx)),
+                "seed": int(payload.get("seed", seed)),
+                "n_ads": int(payload.get("n_ads", n_ads)),
+                "status": status,
+                "optimizer": optimizer_used,
+            }
+            if status == "ok" and relaxed_path.exists():
+                record["energy_eV"] = float(payload["energy_eV"])
+                record["relaxed_path"] = str(relaxed_path)
+                return (
+                    CoverageSampleResult(
+                        coverage=float(cov),
+                        sample_idx=int(payload["sample_idx"]),
+                        seed=int(payload["seed"]),
+                        n_ads=int(payload["n_ads"]),
+                        energy_eV=float(payload["energy_eV"]),
+                        relaxed_path=str(relaxed_path),
+                    ),
+                    record,
+                )
+            return None, record
 
         atoms_prepared = _ensure_cluster_cell(atoms, gas_box=gas_box)
-        relaxed, e = optimize_cluster_structure(
-            atoms_prepared,
-            gas_box,
-            str(work_dir),
-            calculator=calculator,
-            optimizer=optimizer,
-            max_opt_steps=max_opt_steps,
-            yaml_path=vasp_yaml_path,
-        )
-        _write_extxyz(relaxed_path, relaxed, energy=e)
-        json.dump(
-            {
-                "species": species,
-                "coverage": float(cov),
-                "sample_idx": int(sample_idx),
-                "seed": int(seed),
-                "n_ads": int(n_ads),
-                "energy_eV": float(e),
-            },
-            meta.open("w"),
-            indent=2,
-        )
+        relaxed: Atoms | None = None
+        e: float | None = None
+        status = "failed"
+        optimizer_used = str(optimizer)
+        try:
+            relaxed, e = optimize_cluster_structure(
+                atoms_prepared,
+                gas_box,
+                str(work_dir),
+                calculator=calculator,
+                optimizer=optimizer_used,
+                max_opt_steps=max_opt_steps,
+                yaml_path=vasp_yaml_path,
+            )
+            if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(relaxed)):
+                raise ValueError("Non-finite energy/positions")
+            status = "ok"
+        except Exception:
+            _cuda_cleanup()
+            optimizer_used = "FIRE2"
+            try:
+                relaxed, e = optimize_cluster_structure(
+                    atoms_prepared,
+                    gas_box,
+                    str(work_dir),
+                    calculator=calculator,
+                    optimizer=optimizer_used,
+                    max_opt_steps=1000,
+                    yaml_path=vasp_yaml_path,
+                )
+                if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(relaxed)):
+                    raise ValueError("Non-finite energy/positions")
+                status = "ok"
+            except Exception:
+                status = "failed"
+
+        payload: Dict[str, Any] = {
+            "species": species,
+            "coverage": float(cov),
+            "sample_idx": int(sample_idx),
+            "seed": int(seed),
+            "n_ads": int(n_ads),
+            "status": status,
+            "optimizer": optimizer_used,
+        }
+        if status == "ok":
+            assert relaxed is not None and e is not None
+            _write_extxyz(relaxed_path, relaxed, energy=e)
+            payload["energy_eV"] = float(e)
+            payload["relaxed_path"] = str(relaxed_path)
+        json.dump(payload, meta.open("w"), indent=2)
         done.touch()
-        return CoverageSampleResult(
-            coverage=float(cov),
-            sample_idx=int(sample_idx),
-            seed=int(seed),
-            n_ads=int(n_ads),
-            energy_eV=float(e),
-            relaxed_path=str(relaxed_path),
-        )
+
+        record: Dict[str, Any] = {
+            "coverage": float(cov),
+            "sample_idx": int(sample_idx),
+            "seed": int(seed),
+            "n_ads": int(n_ads),
+            "status": status,
+            "optimizer": optimizer_used,
+        }
+        if status == "ok":
+            record["energy_eV"] = float(e)  # type: ignore[arg-type]
+            record["relaxed_path"] = str(relaxed_path)
+            return (
+                CoverageSampleResult(
+                    coverage=float(cov),
+                    sample_idx=int(sample_idx),
+                    seed=int(seed),
+                    n_ads=int(n_ads),
+                    energy_eV=float(e),  # type: ignore[arg-type]
+                    relaxed_path=str(relaxed_path),
+                ),
+                record,
+            )
+        return None, record
 
     def _best_for_coverage(
         *,
@@ -445,12 +530,13 @@ def calc_nanoparticle_orr_overpotential_from_target(
         groups: List[Tuple[int, ...]],
         cov: float,
         gas_energy: float,
-    ) -> Tuple[float, int, float, List[CoverageSampleResult]]:
+    ) -> Tuple[float | None, int, float | None, List[Dict[str, Any]]]:
         n_1ml = len(groups)
         n_keep = _coverage_to_keep(n_1ml, cov)
         n_keep = max(0, min(int(n_keep), int(n_1ml)))
 
-        samples: List[CoverageSampleResult] = []
+        successful: List[CoverageSampleResult] = []
+        sample_records: List[Dict[str, Any]] = []
         species_id = {"O": 1, "OH": 2, "HO2": 3}.get(species, 9)
         cov_id = int(round(float(cov) * 1000.0))
         for sample_idx in range(int(n_samples)):
@@ -464,23 +550,27 @@ def calc_nanoparticle_orr_overpotential_from_target(
             keep = set(selected)
             remove = [idx for grp in groups if grp not in keep for idx in grp]
             candidate = _delete_indices(one_ml, remove)
-            samples.append(
-                _relax_candidate(
-                    candidate,
-                    species=species,
-                    cov=cov,
-                    sample_idx=sample_idx,
-                    seed=seed,
-                    n_ads=n_keep,
-                )
+            result, record = _relax_candidate(
+                candidate,
+                species=species,
+                cov=cov,
+                sample_idx=sample_idx,
+                seed=seed,
+                n_ads=n_keep,
             )
+            sample_records.append(record)
+            if result is not None:
+                successful.append(result)
 
-        best = min(samples, key=lambda s: s.energy_eV)
+        if not successful:
+            return None, int(n_keep), None, sample_records
+
+        best = min(successful, key=lambda s: s.energy_eV)
         if best.n_ads <= 0:
             e_ads = 0.0
         else:
             e_ads = (best.energy_eV - (clean_energy + float(best.n_ads) * float(gas_energy))) / float(best.n_ads)
-        return float(e_ads), int(n_keep), float(best.energy_eV), samples
+        return float(e_ads), int(n_keep), float(best.energy_eV), sample_records
 
     groups_O = _groups_from_1ml(clean_in, o_1ml_in, species="O")
     groups_OH = _groups_from_1ml(clean_in, oh_1ml_in, species="OH")
@@ -495,60 +585,86 @@ def calc_nanoparticle_orr_overpotential_from_target(
         cov_rows: List[Dict[str, Any]] = []
         cov_to_eads: Dict[float, float] = {}
         for cov in coverages_to_run:
-            e_ads_cov, n_keep, e_best, samples = _best_for_coverage(
+            e_ads_cov, n_keep, e_best, sample_records = _best_for_coverage(
                 species=species,
                 one_ml=one_ml,
                 groups=groups,
                 cov=cov,
                 gas_energy=e_gas,
             )
-            cov_to_eads[float(cov)] = float(e_ads_cov)
-            cov_rows.append(
-                {
-                    "coverage": float(cov),
-                    "n_ads_1ml": int(len(groups)),
-                    "n_ads_keep": int(n_keep),
-                    "E_best_eV": float(e_best),
-                    "E_ads_eV_per_site": float(e_ads_cov),
-                    "samples": [s.__dict__ for s in samples],
-                }
-            )
+            row: Dict[str, Any] = {
+                "coverage": float(cov),
+                "n_ads_1ml": int(len(groups)),
+                "n_ads_keep": int(n_keep),
+                "samples": sample_records,
+            }
+            if e_ads_cov is None:
+                row["status"] = "skipped"
+            else:
+                cov_to_eads[float(cov)] = float(e_ads_cov)
+                row["status"] = "ok"
+                row["E_best_eV"] = float(e_best) if e_best is not None else float("nan")
+                row["E_ads_eV_per_site"] = float(e_ads_cov)
+            cov_rows.append(row)
 
-        # Choose maximum eV/site across coverages (as requested)
-        cov_star = max(cov_to_eads.items(), key=lambda kv: kv[1])[0]
-        e_ads_star = float(cov_to_eads[cov_star])
-        per_species[species] = {
-            "gas_energy_eV": float(e_gas),
-            "chosen_coverage": float(cov_star),
-            "chosen_E_ads_eV_per_site": float(e_ads_star),
-            "by_coverage": cov_rows,
-        }
+        if cov_to_eads:
+            # Choose maximum eV/site across successful coverages (as requested)
+            cov_star = max(cov_to_eads.items(), key=lambda kv: kv[1])[0]
+            e_ads_star = float(cov_to_eads[cov_star])
+            per_species[species] = {
+                "status": "ok",
+                "gas_energy_eV": float(e_gas),
+                "chosen_coverage": float(cov_star),
+                "chosen_E_ads_eV_per_site": float(e_ads_star),
+                "by_coverage": cov_rows,
+            }
+        else:
+            per_species[species] = {
+                "status": "failed",
+                "gas_energy_eV": float(e_gas),
+                "chosen_coverage": None,
+                "chosen_E_ads_eV_per_site": float("nan"),
+                "by_coverage": cov_rows,
+            }
 
     # ------------------------------------------------------------------
     # 4) Build "effective" energies and reuse ORR pathway routines
     # ------------------------------------------------------------------
-    effective = {
+    effective: Dict[str, Any] = {
         "H2": {"E_gas": float(E_H2)},
         "H2O": {"E_gas": float(E_H2O)},
         "O2": {"E_gas": float(E_O2)},
-        "O": {
-            "E_gas": float(E_O),
-            "E_total_best": float(clean_energy + E_O + per_species["O"]["chosen_E_ads_eV_per_site"]),
-        },
-        "OH": {
-            "E_gas": float(E_OH),
-            "E_total_best": float(clean_energy + E_OH + per_species["OH"]["chosen_E_ads_eV_per_site"]),
-        },
-        "HO2": {
-            "E_gas": float(E_HO2),
-            "E_total_best": float(clean_energy + E_HO2 + per_species["HO2"]["chosen_E_ads_eV_per_site"]),
-        },
     }
-
-    reaction_energies, energies = compute_reaction_energies(
-        effective, float(clean_energy), solvent_correction_yaml_path
-    )
-    orr_results = get_overpotential_orr(reaction_energies, out_path, verbose=True, save_plot=True)
+    can_compute = all(str(per_species[s].get("status")) == "ok" for s in ("O", "OH", "HO2"))
+    if can_compute:
+        effective.update(
+            {
+                "O": {
+                    "E_gas": float(E_O),
+                    "E_total_best": float(clean_energy + E_O + per_species["O"]["chosen_E_ads_eV_per_site"]),
+                },
+                "OH": {
+                    "E_gas": float(E_OH),
+                    "E_total_best": float(
+                        clean_energy + E_OH + per_species["OH"]["chosen_E_ads_eV_per_site"]
+                    ),
+                },
+                "HO2": {
+                    "E_gas": float(E_HO2),
+                    "E_total_best": float(
+                        clean_energy + E_HO2 + per_species["HO2"]["chosen_E_ads_eV_per_site"]
+                    ),
+                },
+            }
+        )
+        reaction_energies, energies = compute_reaction_energies(
+            effective, float(clean_energy), solvent_correction_yaml_path
+        )
+        orr_results = get_overpotential_orr(reaction_energies, out_path, verbose=True, save_plot=True)
+    else:
+        reaction_energies = [float("nan")] * 4
+        energies = {}
+        orr_results = {"eta": float("nan"), "U_L": float("nan"), "status": "failed"}
 
     summary = {
         "calculator": str(calculator),
