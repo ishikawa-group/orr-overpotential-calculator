@@ -285,6 +285,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     calculator: str = "esen-oc25",
     optimizer: str = "LBFGSLineSearch",
     max_opt_steps: int = 300,
+    retry_optimizer: str = "FIRE",
     vasp_yaml_path: str | None = None,
     solvent_correction_yaml_path: str | None = None,
     vacuum_size: float = 8.0,
@@ -465,7 +466,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
             status = "ok"
         except Exception:
             _cuda_cleanup()
-            optimizer_used = "FIRE2"
+            optimizer_used = str(retry_optimizer)
             try:
                 relaxed, e = optimize_cluster_structure(
                     atoms_prepared,
