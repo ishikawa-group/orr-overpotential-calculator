@@ -261,6 +261,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     log_level: str = "INFO",
     calculator: str = "esen-oc25",
     optimizer: str = "LBFGSLineSearch",
+    max_opt_steps: int = 300,
     vasp_yaml_path: str | None = None,
     solvent_correction_yaml_path: str | None = None,
     vacuum_size: float = 8.0,
@@ -321,6 +322,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
             str(structures_dir / "clean"),
             calculator=calculator,
             optimizer=optimizer,
+            max_opt_steps=max_opt_steps,
             yaml_path=vasp_yaml_path,
         )
         _write_extxyz(clean_cache, clean_relaxed, energy=clean_energy)
@@ -343,6 +345,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
             work_directory=str(gas_dir / name),
             calculator=calculator,
             optimizer=optimizer,
+            max_opt_steps=max_opt_steps,
             yaml_path=vasp_yaml_path,
         )
         _write_extxyz(gas_dir / name / "opt.extxyz", opt, energy=e)
@@ -409,6 +412,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
             str(work_dir),
             calculator=calculator,
             optimizer=optimizer,
+            max_opt_steps=max_opt_steps,
             yaml_path=vasp_yaml_path,
         )
         _write_extxyz(relaxed_path, relaxed, energy=e)

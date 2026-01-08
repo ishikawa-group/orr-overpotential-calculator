@@ -70,6 +70,7 @@ def optimize_gas_molecule(
     work_directory: str,
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
+    max_opt_steps: int = 300,
     yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
@@ -98,6 +99,7 @@ def optimize_gas_molecule(
         molecule, "gas", 
         calculator=calculator,
         optimizer=optimizer,
+        max_opt_steps=max_opt_steps,
         yaml_path=yaml_path, 
         calc_directory=work_directory
     )
@@ -111,6 +113,7 @@ def optimize_bulk_structure(
     work_directory: str,
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
+    max_opt_steps: int = 300,
     yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
@@ -133,6 +136,7 @@ def optimize_bulk_structure(
         bulk_structure, "bulk",
         calculator=calculator,
         optimizer=optimizer,
+        max_opt_steps=max_opt_steps,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -146,6 +150,7 @@ def optimize_slab_structure(
     work_directory: str,
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
+    max_opt_steps: int = 300,
     yaml_path: Optional[str] = None,
     prepare_slab: bool = True,
     ) -> Tuple[Atoms, float]:
@@ -177,6 +182,7 @@ def optimize_slab_structure(
         slab, "slab",
         calculator=calculator,
         optimizer=optimizer,
+        max_opt_steps=max_opt_steps,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -191,6 +197,7 @@ def optimize_cluster_structure(
     work_directory: str,
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
+    max_opt_steps: int = 300,
     yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
@@ -216,6 +223,7 @@ def optimize_cluster_structure(
         cluster_atoms, "cluster",
         calculator=calculator,
         optimizer=optimizer,
+        max_opt_steps=max_opt_steps,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
@@ -229,6 +237,7 @@ def optimize_cluster_with_gas(
     work_directory: str,
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
+    max_opt_steps: int = 300,
     yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
@@ -253,6 +262,7 @@ def optimize_cluster_with_gas(
         cluster_gas_atoms, "cluster_gas",
         calculator=calculator,
         optimizer=optimizer,
+        max_opt_steps=max_opt_steps,
         yaml_path=yaml_path,
         calc_directory=work_directory
     )

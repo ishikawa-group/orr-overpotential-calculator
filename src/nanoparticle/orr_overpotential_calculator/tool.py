@@ -303,6 +303,7 @@ def my_calculator(
         kind: str,
         calculator: str = "mace",
         optimizer: str = "LBFGSLineSearch",
+        max_opt_steps: int = 300,
         yaml_path: Optional[str] = None,
         calc_directory: str = "calc"
 ):
@@ -327,7 +328,9 @@ def my_calculator(
 
     # optimizer options
     fmax = 0.05
-    steps = 300
+    steps = int(max_opt_steps)
+    if steps < 1:
+        raise ValueError(f"max_opt_steps must be >= 1, got {max_opt_steps}")
     optimizer_name = str(optimizer).strip()
     if not optimizer_name:
         raise ValueError("optimizer must be a non-empty string")
