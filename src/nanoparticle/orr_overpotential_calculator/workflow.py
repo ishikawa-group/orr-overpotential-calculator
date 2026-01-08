@@ -260,6 +260,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     overwrite: bool = False,
     log_level: str = "INFO",
     calculator: str = "esen-oc25",
+    optimizer: str = "LBFGSLineSearch",
     vasp_yaml_path: str | None = None,
     solvent_correction_yaml_path: str | None = None,
     vacuum_size: float = 8.0,
@@ -315,7 +316,12 @@ def calc_nanoparticle_orr_overpotential_from_target(
     else:
         clean_prepared = _ensure_cluster_cell(clean_in, gas_box=gas_box)
         clean_relaxed, clean_energy = optimize_cluster_structure(
-            clean_prepared, gas_box, str(structures_dir / "clean"), calculator, vasp_yaml_path
+            clean_prepared,
+            gas_box,
+            str(structures_dir / "clean"),
+            calculator=calculator,
+            optimizer=optimizer,
+            yaml_path=vasp_yaml_path,
         )
         _write_extxyz(clean_cache, clean_relaxed, energy=clean_energy)
         json.dump({"energy_eV": float(clean_energy), "gas_box_A": gas_box}, clean_energy_path.open("w"), indent=2)
@@ -331,7 +337,14 @@ def calc_nanoparticle_orr_overpotential_from_target(
         if p.exists() and not overwrite:
             return float(json.load(p.open())["E_opt"])
         (gas_dir / name).mkdir(parents=True, exist_ok=True)
-        opt, e = optimize_gas_molecule(name, gas_box_size=15.0, work_directory=str(gas_dir / name), calculator=calculator, yaml_path=vasp_yaml_path)
+        opt, e = optimize_gas_molecule(
+            name,
+            gas_box_size=15.0,
+            work_directory=str(gas_dir / name),
+            calculator=calculator,
+            optimizer=optimizer,
+            yaml_path=vasp_yaml_path,
+        )
         _write_extxyz(gas_dir / name / "opt.extxyz", opt, energy=e)
         json.dump({"E_opt": float(e)}, p.open("w"), indent=2)
         return float(e)
@@ -391,7 +404,12 @@ def calc_nanoparticle_orr_overpotential_from_target(
 
         atoms_prepared = _ensure_cluster_cell(atoms, gas_box=gas_box)
         relaxed, e = optimize_cluster_structure(
-            atoms_prepared, gas_box, str(work_dir), calculator, vasp_yaml_path
+            atoms_prepared,
+            gas_box,
+            str(work_dir),
+            calculator=calculator,
+            optimizer=optimizer,
+            yaml_path=vasp_yaml_path,
         )
         _write_extxyz(relaxed_path, relaxed, energy=e)
         json.dump(

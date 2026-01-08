@@ -302,6 +302,7 @@ def my_calculator(
         atoms,
         kind: str,
         calculator: str = "mace",
+        optimizer: str = "LBFGSLineSearch",
         yaml_path: Optional[str] = None,
         calc_directory: str = "calc"
 ):
@@ -327,6 +328,24 @@ def my_calculator(
     # optimizer options
     fmax = 0.05
     steps = 300
+    optimizer_name = str(optimizer).strip()
+    if not optimizer_name:
+        raise ValueError("optimizer must be a non-empty string")
+    opt_key = "".join(ch for ch in optimizer_name.lower() if ch.isalnum()).replace("serarch", "search")
+    from ase.optimize import BFGS, LBFGS, FIRE, FIRE2, BFGSLineSearch, LBFGSLineSearch
+
+    optimizer_mapping = {
+        "fire": FIRE,
+        "fire2": FIRE2,
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "bfgslinesearch": BFGSLineSearch,
+        "lbfgslinesearch": LBFGSLineSearch,
+    }
+    if opt_key not in optimizer_mapping:
+        valid = ", ".join(sorted({v.__name__ for v in optimizer_mapping.values()}))
+        raise ValueError(f"Unsupported optimizer: {optimizer!r}. Use one of: {valid}")
+    optimizer_cls = optimizer_mapping[opt_key]
 
     if calculator == "vasp":
         from ase.calculators.vasp import Vasp
@@ -392,7 +411,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -421,7 +440,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -451,7 +470,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -480,7 +499,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -510,7 +529,7 @@ def my_calculator(
         if kind == "bulk":
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -540,7 +559,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -568,7 +587,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -594,7 +613,7 @@ def my_calculator(
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         # Perform structure optimization
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
         if isinstance(atoms, FrechetCellFilter):
@@ -620,7 +639,7 @@ def my_calculator(
             
             # Apply FrechetCellFilter
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
-            optimizer = LBFGSLineSearch(atoms)
+            optimizer = optimizer_cls(atoms)
             optimizer.run(fmax=fmax, steps=steps)
             
             # Extract atoms from filter
@@ -635,7 +654,7 @@ def my_calculator(
                 atoms.set_pbc(False)
 
             # Perform structure optimization
-            optimizer = LBFGSLineSearch(atoms)
+            optimizer = optimizer_cls(atoms)
             optimizer.run(fmax=fmax, steps=steps)
 
     elif calculator == "esen-oc25":
@@ -663,7 +682,7 @@ def my_calculator(
 
         atoms.calc = ProtectedCalculator(fairchem_calculator)
 
-        optimizer = LBFGSLineSearch(atoms)
+        optimizer = optimizer_cls(atoms)
         optimizer.run(fmax=fmax, steps=steps)
 
     elif calculator == "qe":
