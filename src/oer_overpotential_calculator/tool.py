@@ -4,10 +4,25 @@ import numpy as np
 import yaml
 import os
 import warnings
+import torch
 from ase.calculators.calculator import Calculator
+
+
+os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 
 # Suppress scipy warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
+
+
+def get_device():
+    """Return device string for calculators (not torch.device object)."""
+    if torch.cuda.is_available():
+        return "cuda"
+    # --- dropped MPS because MACE does not support float64, and MPS only works with float64
+    # elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+    #     return "mps"
+    else:
+        return "cpu"
 
 
 def resolve_vasp_yaml_path(yaml_path: Optional[str]) -> str:
@@ -361,7 +376,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
 
         mace_calculator = mace_mp(model=url,
@@ -390,7 +405,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
 
         mace_mh_calculator = mace_mp(
@@ -419,7 +434,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
 
         mace_mh_calculator = mace_mp(
@@ -449,7 +464,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
 
         mace_mh_calculator = mace_mp(
@@ -478,7 +493,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
 
         mace_mh_calculator = mace_mp(
@@ -508,14 +523,14 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         url = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_matpes_0/MACE-matpes-pbe-omat-ft.model"
 
         mace_d3_calculator = mace_mp(model=url,
-                                  dispersion=True,
-                                  dispersion_xc="pbe",
-                                  default_dtype="float64",
-                                  device=device)
+                                    dispersion=True,
+                                    dispersion_xc="pbe",
+                                    default_dtype="float64",
+                                    device=device)
 
         # 保護されたカリキュレータをセット
         atoms.calc = ProtectedCalculator(mace_d3_calculator)
@@ -540,8 +555,8 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE, LBFGS
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        orb = pretrained.orb_v3_conservative_inf_omat(device=device, precision="float32-highest")
+        device = get_device()
+        orb = pretrained.orb_v3_conservative_inf_omat(device=device, precision="float64-highest")
 
         orb_calculator = ORBCalculator(orb, device=device)
 
@@ -567,7 +582,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE, LBFGS
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
 
         sevenn_calculator = SevenNetCalculator('7net-mf-ompa', modal='mpa', enable_cueq=True)
 
@@ -595,7 +610,7 @@ def my_calculator(
         from ase.filters import FrechetCellFilter
         from ase.optimize import FIRE, FIRE2, LBFGS, BFGSLineSearch
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
 
         if kind == "bulk":
@@ -628,7 +643,7 @@ def my_calculator(
         from ase.optimize import BFGSLineSearch
         from omegaconf import OmegaConf
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = get_device()
         predictor = pretrained_mlip.get_predict_unit("esen-sm-conserving-all-oc25", device=device)
         fairchem_calculator = FAIRChemCalculator(predictor)
 
@@ -717,7 +732,8 @@ def my_calculator(
         )
 
     else:
-        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', 'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-s', 'fairchem', or 'qe'")
+        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', "
+                         "'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-s', 'fairchem', or 'qe'")
 
     return atoms
 
@@ -922,7 +938,8 @@ def create_oer_volcano_plot(
         figsize: Figure size (width, height) in inches
         markersize: Marker size
         ideal_line: Ideal limiting potential value (V)
-        solvent_correction_yaml_path: Path to solvent correction YAML file (Note: Not used in this function as corrections are already applied in CSV generation)
+        solvent_correction_yaml_path: Path to solvent correction YAML file (Note: Not used in this function as
+                                                                            corrections are already applied in CSV)
         
     Returns:
         Path of saved image
@@ -947,7 +964,9 @@ def create_oer_volcano_plot(
     # Constants
     T = 298.15  # K
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
+    # Zero-point energy corrections (eV)
+    #   Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j,
+    #   https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
         "H2": 0.27, "H2O": 0.56,
         "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
@@ -955,7 +974,9 @@ def create_oer_volcano_plot(
     # Calculate O2 ZPE from H2O and H2
     zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
+    # Entropy terms T*S (eV)
+    #   Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j,
+    #   https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
         "H2": 0.41 * T / 298.15, "H2O": 0.67 * T / 298.15,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
@@ -1285,7 +1306,8 @@ def create_trend_plot(
         ax.plot(x_range, y_range, 'r-', linewidth=2, alpha=0.8, label='Linear fit')
         
         # Add equation and R² to the plot
-        equation_text = f'd{energy_type}_{y_label} = {slope:.3f} × d{energy_type}_{x_label} + {intercept:.3f}\nR² = {r2:.3f}'
+        equation_text = (f'd{energy_type}_{y_label} = {slope:.3f} × d{energy_type}_{x_label} + {intercept:.3f}\n'
+                         f'R² = {r2:.3f}')
         
         # Position the text box in upper left corner
         ax.text(0.05, 0.95, equation_text, 

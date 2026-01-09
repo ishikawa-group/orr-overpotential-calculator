@@ -94,6 +94,8 @@ def calculate_required_molecules(
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         bulk_energy: float = None,
+        fmax: float = 0.05,
+        steps: int = 10,
     ) -> Dict[str, Any]:
     """
     Calculate gas-phase and adsorption energies for all required molecules.
@@ -160,12 +162,9 @@ def calculate_required_molecules(
                 # Perform new calculation
                 total_energy, elapsed_time = calculate_adsorption_with_offset(
                     optimized_slab, optimized_molecule, offset, str(work_dir),
-                    calculator, vasp_yaml_path
+                    calculator, vasp_yaml_path, fmax=fmax, steps=steps,
                 )
-                json.dump({
-                    "E_total": total_energy,
-                    "elapsed": elapsed_time
-                }, offset_json.open("w"))
+                json.dump({"E_total": total_energy, "elapsed": elapsed_time}, offset_json.open("w"))
                 (work_dir / ".done").touch()
 
             offset_data[key] = {"E_total": total_energy, "elapsed": elapsed_time}
@@ -350,7 +349,7 @@ def compute_reaction_energies(
     # O2(g) energy corrected (SI of Bligaard/Nørskov)
     E_O2_gas = 2 * (2.46 + E_H2O_gas - E_H2_gas)
 
-    # Slab+adsorbate total energies
+    # Slab + adsorbate total energies
     E_slab_OOH = get_total_energy("HO2")  # HO2 = OOH*
     E_slab_O = get_total_energy("O")
     E_slab_OH = get_total_energy("OH")
@@ -398,7 +397,7 @@ def compute_reaction_energies(
     return reaction_energies, energies
 
 
-def get_overpotential_oer(
+def _get_overpotential_oer(
         reaction_energies: List[float],
         output_dir: Path,
         temperature: float = 298.15,
@@ -421,7 +420,9 @@ def get_overpotential_oer(
     reaction_count = 4  # 4-electron pathway
     assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
+    # Zero-point energy corrections (eV)
+    #   References: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j,
+    #   https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     zpe = {
         "H2": 0.27, "H2O": 0.56,
         "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
@@ -429,7 +430,10 @@ def get_overpotential_oer(
     # Calculate O2 ZPE from H2O and H2
     zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
+    # Entropy terms T*S (eV)
+    #   References:
+    #   https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j,
+    #   https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
         "H2": 0.41 / temperature, "H2O": 0.67 / temperature,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
@@ -581,7 +585,7 @@ def get_overpotential_oer(
 # Main Workflow Functions
 # ---------------------------------------------------------------------------
 
-def calc_oer_overpotential(
+def get_overpotential_oer(
         bulk: Atoms = None,
         surface: Atoms = None,
         outdir: str = "result",
@@ -591,6 +595,8 @@ def calc_oer_overpotential(
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
+        fmax: float = 0.05,
+        steps: int = 10,
     ) -> Dict[str, Any]:
     """
     Calculate OER overpotential for slab systems.
@@ -637,16 +643,17 @@ def calc_oer_overpotential(
     if surface is None:
         if bulk is None:
             raise ValueError("Either bulk or surface must be provided.")
+
         logger.info("Optimizing bulk structure...")
         optimized_bulk, bulk_energy = optimize_bulk_structure(
-            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
+            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path, fmax=fmax, steps=steps
         )
         write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
 
         # 2. Clean slab optimization from bulk
         logger.info("Optimizing clean slab...")
         optimized_slab, slab_energy = optimize_slab_structure(
-            optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path
+            optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path, fmax=fmax, steps=steps
         )
         write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
     else:
@@ -661,7 +668,9 @@ def calc_oer_overpotential(
             slab, "slab",
             calculator=calculator,
             yaml_path=vasp_yaml_path,
-            calc_directory=str(outdir_path / "slab")
+            calc_directory=str(outdir_path / "slab"),
+            fmax=fmax,
+            steps=steps,
         )
         slab_energy = optimized_slab.get_potential_energy()
         write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
@@ -671,12 +680,12 @@ def calc_oer_overpotential(
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
         overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, vasp_yaml_path=vasp_yaml_path,
-        bulk_energy=bulk_energy,
+        bulk_energy=bulk_energy, fmax=fmax, steps=steps
     )
 
     # 4. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, slab_energy, solvent_correction_yaml_path)
-    oer_results = get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
+    oer_results = _get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
     overpotential = oer_results["eta"]
 
     # Add E_bulk to oer_results for external access
@@ -752,7 +761,7 @@ def calc_cluster_oer_overpotential(
     gas_box = cluster_diameter + vacuum_size
 
     optimized_cluster, cluster_energy = optimize_cluster_structure(
-        cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path
+        cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path, fmax, steps
     )
 
     write(str(outdir_path / "cluster" / "optimized_cluster.extxyz"), optimized_cluster)
@@ -779,7 +788,7 @@ def calc_cluster_oer_overpotential(
 
     # 3. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, cluster_energy, solvent_correction_yaml_path)
-    oer_results = get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
+    oer_results = _get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
 
     # Add cluster energy as E_bulk for consistency
     oer_results["E_bulk"] = float(cluster_energy)
@@ -795,7 +804,7 @@ def calc_cluster_oer_overpotential(
     return oer_results
 
 
-def calc_oer_overpotential_modified(
+def get_overpotential_oer_modified(
     bulk: Atoms,
     outdir: str = "result/modified_surface",
     base_dir: Optional[str] = None,
@@ -804,7 +813,7 @@ def calc_oer_overpotential_modified(
     calculator: str = "mace",
     oer_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     modify_adsorbates: Dict[str, Atoms] = None,
-    modify_offset: Dict[str, List[Tuple[float, float]]] = None,
+    adsorbate_offset: Dict[str, List[Tuple[float, float]]] = None,
     vasp_yaml_path: str = None,
     solvent_correction_yaml_path: str = None,
 ) -> Dict[str, Any]:
@@ -820,7 +829,7 @@ def calc_oer_overpotential_modified(
         calculator: Calculator type ("vasp", "mace")
         oer_adsorbates: Adsorption sites for OER-related species
         modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
-        modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
+        adsorbate_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
         vasp_yaml_path: Path to VASP configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
 
@@ -842,8 +851,8 @@ def calc_oer_overpotential_modified(
         oer_adsorbates = ADSORBATES
 
     # Check modifier molecules and positions
-    if modify_adsorbates is None or modify_offset is None:
-        raise ValueError("Surface modifier molecules (modify_adsorbates) and adsorption positions (modify_offset) are required")
+    if modify_adsorbates is None or adsorbate_offset is None:
+        raise ValueError("Surface modifier (modify_adsorbates) and adsorption positions (adsorbate_offset) are needed")
 
     # Directory setup (prefer outdir; allow legacy base_dir)
     if base_dir and base_dir != outdir:
@@ -859,7 +868,7 @@ def calc_oer_overpotential_modified(
     bulk_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(bulk_dir), calculator, vasp_yaml_path
+        bulk, str(bulk_dir), calculator, vasp_yaml_path, fmax, steps
     )
     write(str(bulk_dir / "optimized_bulk.extxyz"), optimized_bulk)
 
@@ -869,7 +878,7 @@ def calc_oer_overpotential_modified(
     slab_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(slab_dir), calculator, vasp_yaml_path
+        optimized_bulk, str(slab_dir), calculator, vasp_yaml_path, fmax, steps
     )
     write(str(slab_dir / "optimized_slab.extxyz"), optimized_slab)
 
@@ -877,7 +886,7 @@ def calc_oer_overpotential_modified(
     # Use the first modifier molecule
     modifier_name = list(modify_adsorbates.keys())[0]
     modifier_molecule = modify_adsorbates[modifier_name]
-    modifier_offset = modify_offset[modifier_name][0]  # Use single position
+    modifier_offset = adsorbate_offset[modifier_name][0]  # Use single position
 
     logger.info(f"Attaching surface modifier {modifier_name} at position {modifier_offset}...")
 
@@ -916,7 +925,7 @@ def calc_oer_overpotential_modified(
 
     # --- 5. Reaction energy and overpotential calculation ---
     reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy, solvent_correction_yaml_path)
-    oer_results = get_overpotential_oer(reaction_energies, result_dir, verbose=True, save_plot=True)
+    oer_results = _get_overpotential_oer(reaction_energies, result_dir, verbose=True, save_plot=True)
     overpotential = oer_results["eta"]
 
     # --- 6. Summary generation ---
