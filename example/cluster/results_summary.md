@@ -22,7 +22,7 @@ import numpy as np
 from ase import Atoms
 from ase.io import write
 from ase.cluster.octahedron import Octahedron
-from orr_overpotential_calculator import place_adsorbate
+from surface.orr_overpotential_calculator import place_adsorbate
 import os
 
 # Create an octahedral Pt cluster with edge length of 4 atoms
@@ -90,7 +90,7 @@ from ase.build import fcc111
 from ase.cluster.octahedron import Octahedron
 
 # Import ORR overpotential calculation function
-from orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
+from surface.orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
 
 #---------------------
 # Parameter settings
@@ -258,7 +258,7 @@ from ase.build import fcc111
 from ase.cluster.octahedron import Octahedron
 
 # Import ORR overpotential calculation function
-from orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
+from surface.orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
 
 #---------------------
 # Parameter settings
@@ -325,7 +325,7 @@ from pathlib import Path
 from typing import Dict
 
 # Import tool modules from ORR calculator
-from orr_overpotential_calculator import generate_result_csv, plot_free_energy_diagram
+from surface.orr_overpotential_calculator import generate_result_csv, plot_free_energy_diagram
 
 # Base path settings
 base_dir = Path(__file__).parent.parent

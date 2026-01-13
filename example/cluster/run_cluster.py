@@ -9,7 +9,7 @@ from ase.build import fcc111
 from ase.cluster.octahedron import Octahedron
 
 # ORR過電圧計算関数をインポート
-from orr_overpotential_calculator import calc_cluster_orr_overpotential
+from surface.orr_overpotential_calculator import calc_cluster_orr_overpotential
 
 # ----------------
 # 引数の設定
