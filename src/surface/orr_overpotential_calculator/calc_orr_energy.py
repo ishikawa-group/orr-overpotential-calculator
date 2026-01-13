@@ -22,7 +22,7 @@ from ase.filters import FrechetCellFilter, ExpCellFilter
 from ase.io import write
 
 # Add custom module path
-from orr_overpotential_calculator.tool import (
+from .tool import (
     parallel_displacement,
     fix_lower_surface,
     set_initial_magmoms,

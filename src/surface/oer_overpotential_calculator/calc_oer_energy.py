@@ -17,7 +17,7 @@ from ase.build import add_adsorbate
 from ase.io import write
 
 # Add custom module path
-from oer_overpotential_calculator.tool import (
+from .tool import (
     parallel_displacement,
     fix_lower_surface,
     set_initial_magmoms,

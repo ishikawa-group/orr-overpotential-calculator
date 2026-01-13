@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Tuple
 from ase.build import fcc111
 
 # ORR過電圧計算関数をインポート
-from orr_overpotential_calculator import calc_orr_overpotential
+from surface.orr_overpotential_calculator import calc_orr_overpotential
 
 # ---------------------
 # 引数の設定

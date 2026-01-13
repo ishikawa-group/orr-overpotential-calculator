@@ -3,7 +3,7 @@ from ase import Atoms
 from ase.io import write
 from ase.visualize import view
 from ase.cluster.octahedron import Octahedron
-from orr_overpotential_calculator import place_adsorbate
+from surface.orr_overpotential_calculator import place_adsorbate
 import os
 
 # Ptでエッジ長4原子の正八面体クラスターを作成

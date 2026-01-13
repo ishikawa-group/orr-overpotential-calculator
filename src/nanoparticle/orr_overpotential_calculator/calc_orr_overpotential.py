@@ -27,7 +27,7 @@ from ase.build import fcc111, add_adsorbate
 from ase.io import read, write
 
 # External helper functions
-from orr_overpotential_calculator.calc_orr_energy import (
+from .calc_orr_energy import (
     optimize_bulk_structure,
     optimize_slab_structure,
     optimize_gas_molecule,
@@ -355,13 +355,13 @@ def compute_reaction_energies(
         with open(solvent_correction_yaml_path, 'r') as f:
             solvent_corrections = yaml.safe_load(f)
         E_slab_O = E_slab_O - solvent_corrections.get('O', 0)
-        E_slab_OOH = E_slab_OOH - solvent_corrections.get('OOH', 0.25)
-        E_slab_OH = E_slab_OH - solvent_corrections.get('OH', 0.5)
+        E_slab_OOH = E_slab_OOH - solvent_corrections.get('OOH', 0)
+        E_slab_OH = E_slab_OH - solvent_corrections.get('OH', 0)
     else:
-        # Default solvent corrections
+        # Default solvent corrections (nanoparticle): no implicit solvent correction
         E_slab_O = E_slab_O - 0
-        E_slab_OOH = E_slab_OOH - 0.25
-        E_slab_OH = E_slab_OH - 0.5
+        E_slab_OOH = E_slab_OOH - 0
+        E_slab_OH = E_slab_OH - 0
 
     # Store all energies
     energies = {

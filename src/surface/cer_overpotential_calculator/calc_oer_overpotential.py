@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-OER Overpotential Workflow (Offset-based Adsorption Version)
-============================================================
+CER (Chlorine Evolution Reaction) Overpotential Workflow
+=======================================================
 
-- Gas-phase optimization: O2, H2, H2O, OH, HO2(=OOH), O (6 molecules total)
-- Adsorption optimization: OOH*, O*, OH* (3 adsorbates total)
+- Gas-phase optimization: Cl2 (only)
+- Adsorption optimization: Cl* (only; whether it becomes Cl* or OCl* depends on the input surface)
 
-The lowest energy configuration is adopted as the representative value for each
-adsorbate species to evaluate ΔE and η (OER, oxidation direction).
+Mechanism (Volmer–Heyrovsky, 2-step):
+  1) * + Cl-  -> Cl*  + e-
+  2) Cl* + Cl- -> * + Cl2(g) + e-
+
+If the input surface is O-covered, the intermediate can be interpreted as OCl*.
 """
 from __future__ import annotations
 import argparse
@@ -27,7 +30,7 @@ from ase.build import fcc111, add_adsorbate
 from ase.io import read, write
 
 # External helper functions
-from oer_overpotential_calculator.calc_oer_energy import (
+from .calc_oer_energy import (
     optimize_bulk_structure,
     optimize_slab_structure,
     optimize_gas_molecule,
@@ -50,26 +53,18 @@ np.set_printoptions(precision=3)
 # Configuration Constants
 # ---------------------------------------------------------------------------
 
-# Molecular library (gas-phase includes all species, adsorbates are subset)
+# Molecular library (CER)
 MOLECULES: Dict[str, Atoms] = {
-    # Adsorbates (gas + adsorption calculations)
-    "OH": Atoms("OH", positions=[(0, 0, 0), (0.686, 0.0, 0.686)]),
-    "HO2": Atoms("OOH", positions=[(0, 0, 0), (0, -0.73, 1.264), (0.939, -0.8525, 1.4766)]),
-    "O": Atoms("O", positions=[(0, 0, 0)]),
-    # Gas-phase only
-    "O2": Atoms("OO", positions=[(0, 0, 0), (0, 0, 1.21)]),
-    "H2O": Atoms("OHH", positions=[(0, 0, 0), (0.759, 0, 0.588), (-0.759, 0, 0.588)]),
-    "H2": Atoms("HH", positions=[(0, 0, 0), (0, 0, 0.74)]),
+    "Cl2": Atoms("ClCl", positions=[(0, 0, 0), (0, 0, 1.99)]),
+    "Cl": Atoms("Cl", positions=[(0, 0, 0)]),
 }
 
 # Molecules that skip adsorption calculations
-GAS_ONLY: set[str] = {"H2", "O2", "H2O"}
+GAS_ONLY: set[str] = {"Cl2"}
 
 # Default adsorption sites (fractional coordinates)
 ADSORBATES: Dict[str, List[Tuple[float, float]]] = {
-    "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],  # ontop, bridge, hollow
-    "O": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
-    "OH": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],
+    "Cl": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33)],  # ontop, bridge, hollow
 }
 
 # Structural parameters (in Angstroms)
@@ -78,7 +73,10 @@ GAS_BOX = 15.0
 ADSORBATE_HEIGHT = 0.5
 
 # Logger setup
-logger = logging.getLogger("oer_workflow")
+logger = logging.getLogger("cer_workflow")
+
+# CER equilibrium potential (standard, 25°C) for: Cl2 + 2e- -> 2Cl-
+CER_EQUILIBRIUM_POTENTIAL = 1.358  # V vs SHE
 
 # ---------------------------------------------------------------------------
 # Adsorption Energy Calculation Functions (Offset-based)
@@ -94,8 +92,7 @@ def calculate_required_molecules(
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         bulk_energy: float = None,
-        fmax: float = 0.05,
-        steps: int = 10,
+        adsorbate_height: float = ADSORBATE_HEIGHT,
     ) -> Dict[str, Any]:
     """
     Calculate gas-phase and adsorption energies for all required molecules.
@@ -128,21 +125,34 @@ def calculate_required_molecules(
         gas_dir.mkdir(parents=True, exist_ok=True)
         adsorption_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Gas-phase optimization
-        gas_json = gas_dir / "opt_result.json"
-        xyz_gas = gas_dir / "opt.extxyz"
-
-        optimized_molecule, gas_energy = optimize_gas_molecule(
-            molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
-        )
-        optimized_molecule.write(xyz_gas)
-        json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
-
-        results.setdefault(molecule_name, {})["E_gas"] = float(gas_energy)
-
-        # 2. Skip adsorption for gas-only molecules
+        # 1. Gas-phase optimization (CER: only Cl2)
+        gas_energy: Optional[float] = None
         if molecule_name in GAS_ONLY:
+            gas_json = gas_dir / "opt_result.json"
+            xyz_gas = gas_dir / "opt.extxyz"
+            if gas_json.exists() and xyz_gas.exists() and not overwrite:
+                try:
+                    data = json.load(gas_json.open())
+                    gas_energy = float(data["E_opt"])
+                    optimized_molecule = read(xyz_gas)
+                except Exception:
+                    optimized_molecule, gas_energy = optimize_gas_molecule(
+                        molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
+                    )
+                    optimized_molecule.write(xyz_gas)
+                    json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
+            else:
+                optimized_molecule, gas_energy = optimize_gas_molecule(
+                    molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
+                )
+                optimized_molecule.write(xyz_gas)
+                json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
+            results.setdefault(molecule_name, {})["E_gas"] = float(gas_energy)
             continue
+
+        # Adsorbates: use the template geometry (skip gas-phase optimization)
+        optimized_molecule = molecule.copy()
+        results.setdefault(molecule_name, {})["E_gas"] = None
 
         # 3. Adsorption calculations at different offsets
         offsets = adsorbates.get(molecule_name, [])
@@ -162,9 +172,12 @@ def calculate_required_molecules(
                 # Perform new calculation
                 total_energy, elapsed_time = calculate_adsorption_with_offset(
                     optimized_slab, optimized_molecule, offset, str(work_dir),
-                    calculator, vasp_yaml_path, fmax=fmax, steps=steps,
+                    calculator, vasp_yaml_path, height=adsorbate_height
                 )
-                json.dump({"E_total": total_energy, "elapsed": elapsed_time}, offset_json.open("w"))
+                json.dump({
+                    "E_total": total_energy,
+                    "elapsed": elapsed_time
+                }, offset_json.open("w"))
                 (work_dir / ".done").touch()
 
             offset_data[key] = {"E_total": total_energy, "elapsed": elapsed_time}
@@ -175,15 +188,19 @@ def calculate_required_molecules(
                 ((k, d["E_total"]) for k, d in offset_data.items()),
                 key=lambda x: x[1]
             )
-            best_adsorption_energy = best_energy - (slab_energy + gas_energy)
+            # CER: report adsorption energy relative to 1/2 Cl2(g)
+            if "Cl2" not in results or results["Cl2"].get("E_gas") is None:
+                raise ValueError("Cl2 gas energy is required to evaluate CER adsorption energies.")
+            e_cl2_gas = float(results["Cl2"]["E_gas"])
+            best_adsorption_energy = best_energy - (slab_energy + 0.5 * e_cl2_gas)
             results[molecule_name].update({
                 "E_slab": float(slab_energy),
                 "E_total_best": float(best_energy),
                 "best_offset": best_key,
-                "E_ads_best": float(best_adsorption_energy),
+                "E_ads_best_vs_half_Cl2": float(best_adsorption_energy),
                 "offsets": offset_data,
             })
-            logger.info("  -> Best offset: %s   E_ads = %.3f eV", best_key, best_adsorption_energy)
+            logger.info("  -> Best offset: %s   E_ads(vs 1/2 Cl2) = %.3f eV", best_key, best_adsorption_energy)
 
     # 5. Save summary results
     if bulk_energy is not None:
@@ -231,9 +248,7 @@ def calculate_required_molecules_with_indices(
     # Use default indices if none provided
     if indices_dict is None:
         indices_dict = {
-            "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-            "O": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-            "OH": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
+            "Cl": [(0,)],
         }
 
     for molecule_name, molecule in MOLECULES.items():
@@ -244,21 +259,33 @@ def calculate_required_molecules_with_indices(
         gas_dir.mkdir(parents=True, exist_ok=True)
         adsorption_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Gas-phase optimization
-        gas_json = gas_dir / "opt_result.json"
-        xyz_gas = gas_dir / "opt.extxyz"
-
-        optimized_molecule, gas_energy = optimize_gas_molecule(
-            molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
-        )
-        optimized_molecule.write(xyz_gas)
-        json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
-
-        results.setdefault(molecule_name, {})["E_gas"] = float(gas_energy)
-
-        # 2. Skip adsorption for gas-only molecules
+        # 1. Gas-phase optimization (CER: only Cl2)
+        gas_energy: Optional[float] = None
         if molecule_name in GAS_ONLY:
+            gas_json = gas_dir / "opt_result.json"
+            xyz_gas = gas_dir / "opt.extxyz"
+            if gas_json.exists() and xyz_gas.exists() and not overwrite:
+                try:
+                    data = json.load(gas_json.open())
+                    gas_energy = float(data["E_opt"])
+                    optimized_molecule = read(xyz_gas)
+                except Exception:
+                    optimized_molecule, gas_energy = optimize_gas_molecule(
+                        molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
+                    )
+                    optimized_molecule.write(xyz_gas)
+                    json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
+            else:
+                optimized_molecule, gas_energy = optimize_gas_molecule(
+                    molecule_name, GAS_BOX, str(gas_dir), calculator, vasp_yaml_path
+                )
+                optimized_molecule.write(xyz_gas)
+                json.dump({"E_opt": float(gas_energy)}, gas_json.open("w"))
+            results.setdefault(molecule_name, {})["E_gas"] = float(gas_energy)
             continue
+
+        optimized_molecule = molecule.copy()
+        results.setdefault(molecule_name, {})["E_gas"] = None
 
         # 3. Adsorption calculations at specified indices
         indices_list = indices_dict.get(molecule_name, [])
@@ -297,15 +324,18 @@ def calculate_required_molecules_with_indices(
                 ((k, d["E_total"]) for k, d in indices_data.items()),
                 key=lambda x: x[1]
             )
-            best_adsorption_energy = best_energy - (slab_energy + gas_energy)
+            if "Cl2" not in results or results["Cl2"].get("E_gas") is None:
+                raise ValueError("Cl2 gas energy is required to evaluate CER adsorption energies.")
+            e_cl2_gas = float(results["Cl2"]["E_gas"])
+            best_adsorption_energy = best_energy - (slab_energy + 0.5 * e_cl2_gas)
             results[molecule_name].update({
                 "E_slab": float(slab_energy),
                 "E_total_best": float(best_energy),
                 "best_site": best_key,
-                "E_ads_best": float(best_adsorption_energy),
+                "E_ads_best_vs_half_Cl2": float(best_adsorption_energy),
                 "sites": indices_data,
             })
-            logger.info("  -> Best site: %s   E_ads = %.3f eV",
+            logger.info("  -> Best site: %s   E_ads(vs 1/2 Cl2) = %.3f eV",
                         best_key, best_adsorption_energy)
 
     # 5. Save summary results
@@ -327,142 +357,82 @@ def compute_reaction_energies(
         solvent_correction_yaml_path: str = None
     ) -> Tuple[List[float], Dict[str, float]]:
     """
-    Compute reaction energies for the 4-electron OER pathway (oxidation).
+    Compute reaction energies for the 2-electron CER pathway (Volmer–Heyrovsky).
     
     Args:
         results: Dictionary containing calculation results
-        slab_energy: Energy of the clean slab
-        solvent_correction_yaml_path: Path to YAML file containing solvent corrections
+        slab_energy: Energy of the initial surface (* or O*-covered)
+        solvent_correction_yaml_path: Reserved (not used for CER at the moment)
         
     Returns:
         Tuple of (reaction energies list, energies dictionary)
     """
-    def get_gas_energy(molecule: str) -> float:
-        return results[molecule]["E_gas"]
+    if "Cl2" not in results or results["Cl2"].get("E_gas") is None:
+        raise ValueError("Cl2 gas energy (results['Cl2']['E_gas']) is required for CER.")
+    if "Cl" not in results or results["Cl"].get("E_total_best") is None:
+        raise ValueError("Adsorbed Cl total energy (results['Cl']['E_total_best']) is required for CER.")
 
-    def get_total_energy(molecule: str) -> float:
-        return results[molecule]["E_total_best"]
+    e_cl2_gas = float(results["Cl2"]["E_gas"])
+    e_slab_cl = float(results["Cl"]["E_total_best"])
 
-    # Gas-phase energies
-    E_H2_gas = get_gas_energy("H2")
-    E_H2O_gas = get_gas_energy("H2O")
-    # O2(g) energy corrected (SI of Bligaard/Nørskov)
-    E_O2_gas = 2 * (2.46 + E_H2O_gas - E_H2_gas)
+    # Symmetric 2-step energies based on adsorption relative to 1/2 Cl2(g)
+    dE1 = e_slab_cl - (slab_energy + 0.5 * e_cl2_gas)  # * + 1/2 Cl2 -> Cl*
+    dE2 = (slab_energy + 0.5 * e_cl2_gas) - e_slab_cl  # Cl* -> * + 1/2 Cl2
 
-    # Slab + adsorbate total energies
-    E_slab_OOH = get_total_energy("HO2")  # HO2 = OOH*
-    E_slab_O = get_total_energy("O")
-    E_slab_OH = get_total_energy("OH")
-
-    # Apply solvent corrections
-    # References: https://doi.org/10.1016/j.cattod.2018.07.036, https://pubs.acs.org/doi/10.1021/acs.jpclett.7b01018
-    if solvent_correction_yaml_path and os.path.exists(solvent_correction_yaml_path):
-        with open(solvent_correction_yaml_path, 'r') as f:
-            solvent_corrections = yaml.safe_load(f)
-        E_slab_O = E_slab_O - solvent_corrections.get('O', 0)
-        E_slab_OOH = E_slab_OOH - solvent_corrections.get('OOH', 0)
-        E_slab_OH = E_slab_OH - solvent_corrections.get('OH', 0)
-    else:
-        # Default solvent corrections (set to zero)
-        E_slab_O = E_slab_O - 0
-        E_slab_OOH = E_slab_OOH - 0
-        E_slab_OH = E_slab_OH - 0
-
-    # Store all energies
     energies = {
-        "E_H2_g": E_H2_gas,
-        "E_H2O_g": E_H2O_gas,
-        "E_O2_g": E_O2_gas,
-        "E_slab": slab_energy,
-        "E_slab_OOH": E_slab_OOH,
-        "E_slab_O": E_slab_O,
-        "E_slab_OH": E_slab_OH,
+        "E_Cl2_g": e_cl2_gas,
+        "E_slab": float(slab_energy),
+        "E_slab_Cl": e_slab_cl,
+        "dE1": float(dE1),
+        "dE2": float(dE2),
     }
-
-    # Calculate reaction energies ΔE for 4-electron OER pathway (oxidation)
-    # 1) * + H2O → OH* + 1/2 H2
-    dE1 = (E_slab_OH + 0.5 * E_H2_gas) - (slab_energy + E_H2O_gas)
-    # 2) OH* → O* + 1/2 H2
-    dE2 = (E_slab_O + 0.5 * E_H2_gas) - E_slab_OH
-    # 3) O* + H2O → OOH* + 1/2 H2
-    dE3 = (E_slab_OOH + 0.5 * E_H2_gas) - (E_slab_O + E_H2O_gas)
-    # 4) OOH* → O2 + * + 1/2 H2
-    dE4 = (E_O2_gas + slab_energy + 0.5 * E_H2_gas) - E_slab_OOH
-
-    reaction_energies = [dE1, dE2, dE3, dE4]
-    energies.update({
-        "dE1": dE1, "dE2": dE2, "dE3": dE3, "dE4": dE4,
-    })
-
-    return reaction_energies, energies
+    return [float(dE1), float(dE2)], energies
 
 
-def _get_overpotential_oer(
+def get_overpotential_cer(
         reaction_energies: List[float],
-        output_dir: Path,
+        output_dir: Optional[Path],
+        intermediate: str = "Cl*",
         temperature: float = 298.15,
         verbose: bool = False,
         save_plot: bool = True,
+        equilibrium_potential: float = CER_EQUILIBRIUM_POTENTIAL,
     ) -> Dict[str, Any]:
     """
-    Calculate OER overpotential and generate free-energy diagram.
+    Calculate CER overpotential and generate free-energy diagram.
     
     Args:
-        reaction_energies: List of 4 reaction energies (eV)
-        output_dir: Directory for output files
+        reaction_energies: List of 2 reaction energies (eV)
+        output_dir: Directory for output files (None disables file output)
+        intermediate: "Cl*" or "OCl*" (controls diagram labels)
         temperature: Temperature in Kelvin
         verbose: Print detailed information
         save_plot: Whether to save the free-energy diagram plot
+        equilibrium_potential: CER equilibrium potential Ueq in V vs SHE (default 1.358)
         
     Returns:
         Dictionary containing overpotential and thermodynamic data
     """
-    reaction_count = 4  # 4-electron pathway
-    assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
+    reaction_count = 2
+    assert len(reaction_energies) == reaction_count, "reaction_energies must contain 2 elements"
 
-    # Zero-point energy corrections (eV)
-    #   References: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j,
-    #   https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
-    zpe = {
-        "H2": 0.27, "H2O": 0.56,
-        "Oads": 0.07, "OHads": 0.36, "OOHads": 0.43,
-    }
-    # Calculate O2 ZPE from H2O and H2
-    zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
+    # Thermochemical corrections at 298 K from:
+    # https://doi.org/10.1039/B917459A (Table S1)
+    #
+    # 1/2 Cl2 -> Cl_c : ΔZPE=0.02 eV, TΔS=-0.34 eV (at 298 K)
+    t_ref = 298.15
+    temp_factor = temperature / t_ref
+    delta_zpe_ads = 0.02
+    delta_ts_ads = -0.34 * temp_factor
 
-    # Entropy terms T*S (eV)
-    #   References:
-    #   https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j,
-    #   https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
-    entropy = {
-        "H2": 0.41 / temperature, "H2O": 0.67 / temperature,
-        "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
-    }
-    # Calculate O2 entropy from H2O and H2
-    entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
+    delta_zpe = np.array([delta_zpe_ads, -delta_zpe_ads])
+    delta_ts = np.array([delta_ts_ads, -delta_ts_ads])
 
-    # Calculate ZPE and entropy corrections for each reaction step (OER direction)
-    delta_zpe = np.array([
-        (zpe["OHads"] + 0.5 * zpe["H2"]) - zpe["H2O"],                     # * + H2O → OH* + 1/2 H2
-        (zpe["Oads"] + 0.5 * zpe["H2"]) - zpe["OHads"],                    # OH* → O* + 1/2 H2
-        (zpe["OOHads"] + 0.5 * zpe["H2"]) - (zpe["Oads"] + zpe["H2O"]),    # O* + H2O → OOH* + 1/2 H2
-        (zpe["O2"] + 0.5 * zpe["H2"]) - zpe["OOHads"],                     # OOH* → O2 + * + 1/2 H2
-    ])
+    reaction_energies = np.array(reaction_energies, dtype=float)
+    # CHE: oxidation steps producing 1e- each include +Ueq at U=0.
+    delta_g_u0 = reaction_energies + delta_zpe - delta_ts + equilibrium_potential
 
-    delta_ts = temperature * np.array([
-        (entropy["OHads"] + 0.5 * entropy["H2"]) - entropy["H2O"],
-        (entropy["Oads"] + 0.5 * entropy["H2"]) - entropy["OHads"],
-        (entropy["OOHads"] + 0.5 * entropy["H2"]) - (entropy["Oads"] + entropy["H2O"]),
-        (entropy["O2"] + 0.5 * entropy["H2"]) - entropy["OOHads"],
-    ])
-
-    # Calculate free energies
-    reaction_energies = np.array(reaction_energies)
-    delta_g_u0 = reaction_energies + delta_zpe - delta_ts  # ΔG at U=0 V
-
-    # Free energy profiles
     g_profile_u0 = np.concatenate(([0.0], np.cumsum(delta_g_u0)))
-    equilibrium_potential = 1.23  # V
 
     # Step-wise free energy changes (equal to delta_g_u0)
     diff_g_u0 = np.diff(g_profile_u0)
@@ -471,7 +441,7 @@ def _get_overpotential_oer(
     limiting_potential = np.max(diff_g_u0)
     overpotential = limiting_potential - equilibrium_potential
 
-    # Calculate profiles for U=1.23V and U=limiting potential (oxidation lowers ΔG)
+    # Calculate profiles for U=Ueq and U=U_L (oxidation lowers ΔG)
     steps_vec = np.arange(reaction_count + 1)
     g_profile_ueq = g_profile_u0 - steps_vec * equilibrium_potential
     g_profile_ul = g_profile_u0 - steps_vec * limiting_potential
@@ -479,17 +449,17 @@ def _get_overpotential_oer(
     diff_g_ul = np.diff(g_profile_ul)
 
     # Generate free-energy diagram plot
-    if save_plot:
+    if save_plot and output_dir is not None:
         import matplotlib.pyplot as plt
 
-        # Reaction step labels (OER direction)
-        labels = [
-            "* + H$_2$O",
-            "OH* + 0.5H$_2$",
-            "O* + H$_2$ + H$_2$O",
-            "OOH* + 1.5H$_2$",
-            "O$_2$ + * + 2H$_2$",
-        ]
+        intermediate_norm = intermediate.strip()
+        if intermediate_norm not in {"Cl*", "OCl*"}:
+            raise ValueError("intermediate must be 'Cl*' or 'OCl*'")
+        labels = (
+            ["* + Cl$^-$", "Cl*", "* + Cl$_2$(g)"]
+            if intermediate_norm == "Cl*"
+            else ["O* + Cl$^-$", "OCl*", "O* + Cl$_2$(g)"]
+        )
 
         # Steps and relative profiles
         steps = np.arange(reaction_count + 1)
@@ -499,14 +469,14 @@ def _get_overpotential_oer(
 
         # Colors for different potential profiles
         u0_color = 'black'  # U=0V is black
-        ueq_color = 'green'  # U=1.23V is green
+        ueq_color = 'green'  # U=Ueq is green
         ul_color = 'blue'  # U=UL is blue
 
         # Horizontal line width
         line_width = 0.3
 
         # Create figure
-        plt.figure(figsize=(8, 7))
+        plt.figure(figsize=(7.5, 6.5))
 
         # ------ U=0V profile ------
         for i in range(len(steps)):
@@ -524,7 +494,7 @@ def _get_overpotential_oer(
         for i in range(len(steps)):
             plt.hlines(gul_shift[i], steps[i] - line_width, steps[i] + line_width,
                        color=ul_color, linewidth=2.5,
-                       label=f"U$_{{L}}$ = {limiting_potential:.2f} V" if i == 0 else None)
+                       label=f"U$_{{L}}$ = {limiting_potential:.3f} V" if i == 0 else None)
         for i in range(len(steps) - 1):
             plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
                      [gul_shift[i], gul_shift[i + 1]],
@@ -535,7 +505,7 @@ def _get_overpotential_oer(
         for i in range(len(steps)):
             plt.hlines(geq_shift[i], steps[i] - line_width, steps[i] + line_width,
                        color=ueq_color, alpha=0.8, linewidth=2.5,
-                       label=f"U = {equilibrium_potential} V" if i == 0 else None)
+                       label=f"U = {equilibrium_potential:.3f} V (Ueq)" if i == 0 else None)
         for i in range(len(steps) - 1):
             plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
                      [geq_shift[i], geq_shift[i + 1]],
@@ -544,10 +514,10 @@ def _get_overpotential_oer(
                  markersize=6, linestyle='none')
 
         # Formatting
-        plt.xticks(steps, labels, rotation=15, ha='right')
+        plt.xticks(steps, labels, rotation=0)
         plt.ylabel("ΔG (eV)", fontsize=12, fontweight='bold')
         plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
-        plt.title("4e⁻ OER Free-Energy Diagram", fontsize=14, fontweight='bold')
+        plt.title("2e⁻ CER Free-Energy Diagram", fontsize=14, fontweight='bold')
         plt.grid(True, linestyle='--', alpha=0.3)
 
         # Add legend and horizontal zero line
@@ -557,7 +527,7 @@ def _get_overpotential_oer(
         plt.tight_layout()
 
         # Save figure
-        figure_path = output_dir / "OER_free_energy_diagram.png"
+        figure_path = output_dir / "CER_free_energy_diagram.png"
         plt.savefig(figure_path, dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -581,25 +551,25 @@ def _get_overpotential_oer(
     }
 
 
+
 # ---------------------------------------------------------------------------
 # Main Workflow Functions
 # ---------------------------------------------------------------------------
 
-def get_overpotential_oer(
+def calc_cer_overpotential(
         bulk: Atoms = None,
         surface: Atoms = None,
         outdir: str = "result",
         overwrite: bool = False,
         log_level: str = "INFO",
         calculator: str = "mace",
+        intermediate: str = "Cl*",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
-        fmax: float = 0.05,
-        steps: int = 10,
     ) -> Dict[str, Any]:
     """
-    Calculate OER overpotential for slab systems.
+    Calculate CER overpotential for slab systems.
     
     Args:
         bulk: Bulk crystal structure (required if surface is None)
@@ -608,9 +578,10 @@ def get_overpotential_oer(
         overwrite: Force recalculation of existing results
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
+        intermediate: "Cl*" or "OCl*" (controls initial adsorption height and diagram labels)
         adsorbates: Dictionary of adsorption sites
         vasp_yaml_path: Path to VASP configuration file
-        solvent_correction_yaml_path: Path to solvent correction YAML file
+        solvent_correction_yaml_path: Reserved (not used for CER at the moment)
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -624,6 +595,14 @@ def get_overpotential_oer(
     # Use global default if adsorbates not provided
     if adsorbates is None:
         adsorbates = ADSORBATES
+
+    intermediate_norm = intermediate.strip()
+    if intermediate_norm == "Cl*":
+        adsorbate_height = 0.5
+    elif intermediate_norm == "OCl*":
+        adsorbate_height = 2.0
+    else:
+        raise ValueError("intermediate must be 'Cl*' or 'OCl*'")
 
     outdir_path = Path(outdir).resolve()
     outdir_path.mkdir(parents=True, exist_ok=True)
@@ -643,17 +622,16 @@ def get_overpotential_oer(
     if surface is None:
         if bulk is None:
             raise ValueError("Either bulk or surface must be provided.")
-
         logger.info("Optimizing bulk structure...")
         optimized_bulk, bulk_energy = optimize_bulk_structure(
-            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path, fmax=fmax, steps=steps
+            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
         )
         write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
 
         # 2. Clean slab optimization from bulk
         logger.info("Optimizing clean slab...")
         optimized_slab, slab_energy = optimize_slab_structure(
-            optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path, fmax=fmax, steps=steps
+            optimized_bulk, str(outdir_path / "slab"), calculator, vasp_yaml_path
         )
         write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
     else:
@@ -668,9 +646,7 @@ def get_overpotential_oer(
             slab, "slab",
             calculator=calculator,
             yaml_path=vasp_yaml_path,
-            calc_directory=str(outdir_path / "slab"),
-            fmax=fmax,
-            steps=steps,
+            calc_directory=str(outdir_path / "slab")
         )
         slab_energy = optimized_slab.get_potential_energy()
         write(str(outdir_path / "slab" / "optimized_slab.extxyz"), optimized_slab)
@@ -680,46 +656,57 @@ def get_overpotential_oer(
     results = calculate_required_molecules(
         optimized_slab, slab_energy, outdir_path,
         overwrite=overwrite, calculator=calculator, adsorbates=adsorbates, vasp_yaml_path=vasp_yaml_path,
-        bulk_energy=bulk_energy, fmax=fmax, steps=steps
+        bulk_energy=bulk_energy,
+        adsorbate_height=adsorbate_height,
     )
 
     # 4. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, slab_energy, solvent_correction_yaml_path)
-    oer_results = _get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
-    overpotential = oer_results["eta"]
+    cer_results = get_overpotential_cer(
+        reaction_energies,
+        outdir_path,
+        intermediate=intermediate_norm,
+        verbose=True,
+        save_plot=True,
+        equilibrium_potential=CER_EQUILIBRIUM_POTENTIAL,
+    )
+    overpotential = cer_results["eta"]
 
-    # Add E_bulk to oer_results for external access
+    # Add E_bulk to cer_results for external access
     if bulk_energy is not None:
-        oer_results["E_bulk"] = float(bulk_energy)
+        cer_results["E_bulk"] = float(bulk_energy)
 
     # 5. Write summary
-    with (outdir_path / "OER_summary.txt").open("w") as f:
-        f.write("--- OER Summary ---\n\n")
+    with (outdir_path / "CER_summary.txt").open("w") as f:
+        f.write("--- CER Summary ---\n\n")
         if bulk_energy is not None:
             f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
         else:
             f.write("E_bulk: skipped (surface provided)\n")
+        f.write(f"Intermediate = {intermediate_norm}\n")
+        f.write(f"Ueq = {CER_EQUILIBRIUM_POTENTIAL:.3f} V vs SHE\n\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
         f.write(f"Overpotential η = {overpotential:.3f} V\n")
-    logger.info("Summary written → %s", outdir_path / "OER_summary.txt")
+    logger.info("Summary written → %s", outdir_path / "CER_summary.txt")
 
-    return oer_results
+    return cer_results
 
 
-def calc_cluster_oer_overpotential(
+def calc_cluster_cer_overpotential(
         cluster: Atoms,
         outdir: str = "result/matter_sim",
         overwrite: bool = False,
         log_level: str = "INFO",
         calculator: str = "mace",
+        intermediate: str = "Cl*",
         adsorbates: Dict[str, List[Tuple]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
         vacuum_size: float = 20.0,
     ) -> Dict[str, Any]:
     """
-    Calculate OER overpotential for cluster systems.
+    Calculate CER overpotential for cluster systems.
     
     Args:
         cluster: cluster structure
@@ -727,9 +714,10 @@ def calc_cluster_oer_overpotential(
         overwrite: Force recalculation of existing results
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
+        intermediate: "Cl*" or "OCl*" (controls initial adsorption height and diagram labels)
         adsorbates: Dictionary of atomic indices for adsorption sites
         vasp_yaml_path: Path to configuration file
-        solvent_correction_yaml_path: Path to solvent correction YAML file
+        solvent_correction_yaml_path: Reserved (not used for CER at the moment)
         vacuum_size: Vacuum size around cluster (Å)
         
     Returns:
@@ -743,6 +731,14 @@ def calc_cluster_oer_overpotential(
 
     outdir_path = Path(outdir).resolve()
     outdir_path.mkdir(parents=True, exist_ok=True)
+
+    intermediate_norm = intermediate.strip()
+    if intermediate_norm == "Cl*":
+        adsorbate_height = 0.5
+    elif intermediate_norm == "OCl*":
+        adsorbate_height = 2.0
+    else:
+        raise ValueError("intermediate must be 'Cl*' or 'OCl*'")
 
     # vaspでない場合はclusterディレクトリを作成
     if calculator != "vasp":
@@ -761,7 +757,7 @@ def calc_cluster_oer_overpotential(
     gas_box = cluster_diameter + vacuum_size
 
     optimized_cluster, cluster_energy = optimize_cluster_structure(
-        cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path, fmax, steps
+        cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path
     )
 
     write(str(outdir_path / "cluster" / "optimized_cluster.extxyz"), optimized_cluster)
@@ -776,44 +772,52 @@ def calc_cluster_oer_overpotential(
     else:
         # Default index dictionary
         indices_dict = {
-            "HO2": [(0,)],
-            "O": [(0,)],
-            "OH": [(0,)],
+            "Cl": [(0,)],
         }
 
     results = calculate_required_molecules_with_indices(
         optimized_cluster, cluster_energy, outdir_path,
         overwrite=overwrite, calculator=calculator, indices_dict=indices_dict, vasp_yaml_path=vasp_yaml_path,
+        height=adsorbate_height,
     )
 
     # 3. Calculate reaction energies and overpotential
     reaction_energies, energies = compute_reaction_energies(results, cluster_energy, solvent_correction_yaml_path)
-    oer_results = _get_overpotential_oer(reaction_energies, outdir_path, verbose=True, save_plot=True)
+    cer_results = get_overpotential_cer(
+        reaction_energies,
+        outdir_path,
+        intermediate=intermediate_norm,
+        verbose=True,
+        save_plot=True,
+        equilibrium_potential=CER_EQUILIBRIUM_POTENTIAL,
+    )
 
     # Add cluster energy as E_bulk for consistency
-    oer_results["E_bulk"] = float(cluster_energy)
+    cer_results["E_bulk"] = float(cluster_energy)
 
     # 4. Write summary
-    with (outdir_path / "OER_summary.txt").open("w") as f:
-        f.write("--- OER Summary ---\n\n")
+    with (outdir_path / "CER_summary.txt").open("w") as f:
+        f.write("--- CER Summary ---\n\n")
+        f.write(f"Intermediate = {intermediate_norm}\n")
+        f.write(f"Ueq = {CER_EQUILIBRIUM_POTENTIAL:.3f} V vs SHE\n\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))
         f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
-        f.write(f"Overpotential η = {oer_results['eta']:.3f} V\n")
-    logger.info("Summary written → %s", outdir_path / "OER_summary.txt")
+        f.write(f"Overpotential η = {cer_results['eta']:.3f} V\n")
+    logger.info("Summary written → %s", outdir_path / "CER_summary.txt")
 
-    return oer_results
+    return cer_results
 
 
-def get_overpotential_oer_modified(
+def calc_oer_overpotential_modified(
     bulk: Atoms,
     outdir: str = "result/modified_surface",
     base_dir: Optional[str] = None,
     overwrite: bool = False,
     log_level: str = "INFO",
     calculator: str = "mace",
-    oer_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     modify_adsorbates: Dict[str, Atoms] = None,
-    adsorbate_offset: Dict[str, List[Tuple[float, float]]] = None,
+    modify_offset: Dict[str, List[Tuple[float, float]]] = None,
     vasp_yaml_path: str = None,
     solvent_correction_yaml_path: str = None,
 ) -> Dict[str, Any]:
@@ -827,15 +831,19 @@ def get_overpotential_oer_modified(
         overwrite: Force recalculation of existing results
         log_level: Logging level
         calculator: Calculator type ("vasp", "mace")
-        oer_adsorbates: Adsorption sites for OER-related species
+        orr_adsorbates: Adsorption sites for OER-related species
         modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
-        adsorbate_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
+        modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
         vasp_yaml_path: Path to VASP configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
     """
+    raise NotImplementedError(
+        "This module is cer_overpotential_calculator (CER). "
+        "The OER modified-surface workflow is not supported here."
+    )
 
     logger = logging.getLogger("oer_modified_surface")
 
@@ -847,12 +855,12 @@ def get_overpotential_oer_modified(
     )
 
     # Set default values
-    if oer_adsorbates is None:
-        oer_adsorbates = ADSORBATES
+    if orr_adsorbates is None:
+        orr_adsorbates = ADSORBATES
 
     # Check modifier molecules and positions
-    if modify_adsorbates is None or adsorbate_offset is None:
-        raise ValueError("Surface modifier (modify_adsorbates) and adsorption positions (adsorbate_offset) are needed")
+    if modify_adsorbates is None or modify_offset is None:
+        raise ValueError("Surface modifier molecules (modify_adsorbates) and adsorption positions (modify_offset) are required")
 
     # Directory setup (prefer outdir; allow legacy base_dir)
     if base_dir and base_dir != outdir:
@@ -868,7 +876,7 @@ def get_overpotential_oer_modified(
     bulk_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(bulk_dir), calculator, vasp_yaml_path, fmax, steps
+        bulk, str(bulk_dir), calculator, vasp_yaml_path
     )
     write(str(bulk_dir / "optimized_bulk.extxyz"), optimized_bulk)
 
@@ -878,7 +886,7 @@ def get_overpotential_oer_modified(
     slab_dir.mkdir(parents=True, exist_ok=True)
 
     optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(slab_dir), calculator, vasp_yaml_path, fmax, steps
+        optimized_bulk, str(slab_dir), calculator, vasp_yaml_path
     )
     write(str(slab_dir / "optimized_slab.extxyz"), optimized_slab)
 
@@ -886,7 +894,7 @@ def get_overpotential_oer_modified(
     # Use the first modifier molecule
     modifier_name = list(modify_adsorbates.keys())[0]
     modifier_molecule = modify_adsorbates[modifier_name]
-    modifier_offset = adsorbate_offset[modifier_name][0]  # Use single position
+    modifier_offset = modify_offset[modifier_name][0]  # Use single position
 
     logger.info(f"Attaching surface modifier {modifier_name} at position {modifier_offset}...")
 
@@ -919,14 +927,16 @@ def get_overpotential_oer_modified(
         result_dir,
         overwrite=overwrite,
         calculator=calculator,
-        adsorbates=oer_adsorbates,
+        adsorbates=orr_adsorbates,
         vasp_yaml_path=vasp_yaml_path
     )
 
     # --- 5. Reaction energy and overpotential calculation ---
     reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy, solvent_correction_yaml_path)
-    oer_results = _get_overpotential_oer(reaction_energies, result_dir, verbose=True, save_plot=True)
-    overpotential = oer_results["eta"]
+    orr_results = get_overpotential_oer(
+        reaction_energies, result_dir, verbose=True, save_plot=True
+    )
+    overpotential = orr_results["eta"]
 
     # --- 6. Summary generation ---
     with (outdir_path / "OER_summary_modified_surface.txt").open("w") as f:
@@ -938,10 +948,10 @@ def get_overpotential_oer_modified(
     logger.info(f"Saved summary: {outdir_path / 'OER_summary_modified_surface.txt'}")
 
     # Return results including modifier information
-    oer_results.update({
+    orr_results.update({
         "modifier": modifier_name,
         "modifier_offset": modifier_offset,
         "E_bulk": float(bulk_energy),  # Add bulk energy for consistency
     })
 
-    return oer_results
+    return orr_results
