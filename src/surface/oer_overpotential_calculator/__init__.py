@@ -3,10 +3,9 @@
 __version__ = "0.1.0"
 
 # Main workflow functions
-from .calc_oer_overpotential import (
-    calc_oer_overpotential,
-    calc_cluster_oer_overpotential,
-    calc_oer_overpotential_modified,
+from .get_overpotential_oer import (
+    get_overpotential_oer,
+    get_overpotential_oer_modified
 )
 
 # Result analysis functions  
