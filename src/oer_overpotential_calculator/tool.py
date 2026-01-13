@@ -949,7 +949,6 @@ def create_oer_volcano_plot(
     import numpy as np
     from pathlib import Path
     import yaml
-    import os
 
     # Load CSV file
     df = pd.read_csv(csv_file)
