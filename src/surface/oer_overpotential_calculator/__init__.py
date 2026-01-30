@@ -3,9 +3,11 @@
 __version__ = "0.1.0"
 
 # Main workflow functions
-from .get_overpotential_oer import (
+from .calc_oer_overpotential import (
     get_overpotential_oer,
-    get_overpotential_oer_modified
+    calc_oer_overpotential,
+    calc_cluster_oer_overpotential,
+    calc_oer_overpotential_modified,
 )
 
 # Result analysis functions  
@@ -29,6 +31,7 @@ from .calc_oer_energy import (
 )
 
 __all__ = [
+    "get_overpotential_oer",
     "calc_oer_overpotential",
     "calc_cluster_oer_overpotential",
     "calc_oer_overpotential_modified",
