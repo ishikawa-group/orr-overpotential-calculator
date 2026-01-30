@@ -311,7 +311,8 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "fairchem" / "qe" - calculator type
+        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "7net-omni_*" / "fairchem" / "qe"
+            - For 7net-omni, use "7net-omni_<modal>" (e.g., "7net-omni_mpa", "7net-omni_oc20")
         yaml_path: Path to YAML configuration file (or set VASP_YAML_PATH env var)
         calc_directory: Calculation directory for VASP
 
@@ -323,6 +324,15 @@ def my_calculator(
     import torch
 
     calculator = calculator.lower()
+    sevenn_model: Optional[str] = None
+    sevenn_modal: Optional[str] = None
+    if calculator.startswith("7net-omni"):
+        if "_" in calculator:
+            sevenn_model, sevenn_modal = calculator.split("_", 1)
+        else:
+            sevenn_model = calculator
+            sevenn_modal = "mpa"
+        calculator = "7net-omni"
 
     # optimizer options
     # fmax = 0.05
@@ -576,7 +586,7 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calculator == "7net":
+    elif calculator in {"7net", "7net-omni"}:
         from sevenn.calculator import SevenNetCalculator
 
         from ase.filters import FrechetCellFilter
@@ -584,7 +594,16 @@ def my_calculator(
 
         device = get_device()
 
-        sevenn_calculator = SevenNetCalculator('7net-mf-ompa', modal='mpa', enable_cueq=True)
+        if calculator == "7net-omni":
+            sevenn_calculator = SevenNetCalculator(
+                model=sevenn_model,
+                device=device,
+                modal=sevenn_modal,
+                enable_cueq=False,
+                enable_flash=False,
+            )
+        else:
+            sevenn_calculator = SevenNetCalculator('7net-mf-ompa', modal='mpa', enable_cueq=True)
 
         # 保護されたカリキュレータをセット
         atoms.calc = ProtectedCalculator(sevenn_calculator)
@@ -732,8 +751,11 @@ def my_calculator(
         )
 
     else:
-        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', "
-                         "'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-s', 'fairchem', or 'qe'")
+        raise ValueError(
+            "calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', "
+            "'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', '7net-omni_<modal>', "
+            "'uma-s', 'fairchem', or 'qe'"
+        )
 
     return atoms
 
