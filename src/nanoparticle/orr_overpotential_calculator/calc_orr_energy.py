@@ -198,7 +198,8 @@ def optimize_cluster_structure(
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
     max_opt_steps: int = 300,
-    yaml_path: Optional[str] = None
+    yaml_path: Optional[str] = None,
+    center_structure: bool = True,
     ) -> Tuple[Atoms, float]:
     """
     Optimize cluster structure and calculate energy.
@@ -209,6 +210,7 @@ def optimize_cluster_structure(
         work_directory: Directory for calculation files
         calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
+        center_structure: Whether to center the structure in the simulation cell
         
     Returns:
         Tuple of optimized Atoms object and energy (eV)
@@ -216,7 +218,8 @@ def optimize_cluster_structure(
     cluster_atoms = cluster.copy()
     cluster_atoms.set_cell([gas_box_size, gas_box_size, gas_box_size])
     cluster_atoms.set_pbc(True)
-    cluster_atoms.center()
+    if center_structure:
+        cluster_atoms.center()
     cluster_atoms = set_initial_magmoms(cluster_atoms, kind="cluster")
     
     optimized_cluster = my_calculator(

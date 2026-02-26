@@ -32,12 +32,16 @@ from nanoparticle.orr_overpotential_calculator.calc_orr_energy import (
 from nanoparticle.orr_overpotential_calculator.workflow import (
     calc_nanoparticle_orr_overpotential_from_target,
 )
+from nanoparticle.orr_overpotential_calculator.calc_orr_energy_acat import (
+    calc_nanoparticle_orr_overpotential_by_site,
+)
 
 __all__ = [
     "calc_orr_overpotential",
     "calc_cluster_orr_overpotential",
     "calc_orr_overpotential_modified",
     "calc_nanoparticle_orr_overpotential_from_target",
+    "calc_nanoparticle_orr_overpotential_by_site",
     "generate_result_csv",
     "create_orr_volcano_plot",
     "place_adsorbate",
