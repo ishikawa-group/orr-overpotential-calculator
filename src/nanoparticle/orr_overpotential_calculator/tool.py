@@ -313,7 +313,7 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "fairchem" / "qe" - calculator type
+        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "uma-oc20" / "fairchem" / "qe" - calculator type
         yaml_path: Path to YAML configuration file (or set VASP_YAML_PATH env var)
         calc_directory: Calculation directory for VASP
 
@@ -624,6 +624,27 @@ def my_calculator(
         else:
             atoms = atoms
 
+    elif calculator == "uma-oc20":
+        from fairchem.core.calculate import pretrained_mlip
+        from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
+        from ase.filters import FrechetCellFilter
+
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
+        fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
+        atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+        if kind in {"gas", "cluster_gas"}:
+            atoms.set_pbc(False)
+
+        if kind == "bulk":
+            atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
+            optimizer = optimizer_cls(atoms)
+            optimizer.run(fmax=fmax, steps=steps)
+            atoms = atoms.atoms
+        else:
+            optimizer = optimizer_cls(atoms)
+            optimizer.run(fmax=fmax, steps=steps)
+
     elif calculator == "uma-s" or calculator == "fairchem":
         from fairchem.core.calculate import pretrained_mlip                    
         from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
@@ -754,7 +775,7 @@ def my_calculator(
         )
 
     else:
-        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', 'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-s', 'fairchem', or 'qe'")
+        raise ValueError("calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', 'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', 'uma-oc20', 'uma-s', 'fairchem', or 'qe'")
 
     return atoms
 
