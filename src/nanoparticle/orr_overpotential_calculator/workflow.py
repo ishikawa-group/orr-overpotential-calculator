@@ -337,20 +337,48 @@ def calc_nanoparticle_orr_overpotential_from_target(
     clean_energy_path = structures_dir / "clean_relaxed.json"
     if clean_cache.exists() and clean_energy_path.exists() and not overwrite:
         clean_relaxed = ase_read(str(clean_cache))
-        clean_energy = float(json.load(clean_energy_path.open())["energy_eV"])
+        clean_payload = json.load(clean_energy_path.open())
+        clean_energy = float(clean_payload["energy_eV"])
+        clean_optimizer_used = str(clean_payload.get("optimizer", optimizer))
     else:
         clean_prepared = _ensure_cluster_cell(clean_in, gas_box=gas_box)
-        clean_relaxed, clean_energy = optimize_cluster_structure(
-            clean_prepared,
-            gas_box,
-            str(structures_dir / "clean"),
-            calculator=calculator,
-            optimizer=optimizer,
-            max_opt_steps=max_opt_steps,
-            yaml_path=vasp_yaml_path,
-        )
+        clean_optimizer_used = str(optimizer)
+        try:
+            clean_relaxed, clean_energy = optimize_cluster_structure(
+                clean_prepared,
+                gas_box,
+                str(structures_dir / "clean"),
+                calculator=calculator,
+                optimizer=clean_optimizer_used,
+                max_opt_steps=max_opt_steps,
+                yaml_path=vasp_yaml_path,
+            )
+            if (not math.isfinite(float(clean_energy))) or (not _is_finite_atoms(clean_relaxed)):
+                raise ValueError("Non-finite clean optimization result")
+        except Exception:
+            _cuda_cleanup()
+            clean_optimizer_used = str(retry_optimizer)
+            clean_relaxed, clean_energy = optimize_cluster_structure(
+                clean_prepared,
+                gas_box,
+                str(structures_dir / "clean"),
+                calculator=calculator,
+                optimizer=clean_optimizer_used,
+                max_opt_steps=1000,
+                yaml_path=vasp_yaml_path,
+            )
+            if (not math.isfinite(float(clean_energy))) or (not _is_finite_atoms(clean_relaxed)):
+                raise ValueError("Non-finite clean optimization result after retry")
         _write_extxyz(clean_cache, clean_relaxed, energy=clean_energy)
-        json.dump({"energy_eV": float(clean_energy), "gas_box_A": gas_box}, clean_energy_path.open("w"), indent=2)
+        json.dump(
+            {
+                "energy_eV": float(clean_energy),
+                "gas_box_A": gas_box,
+                "optimizer": str(clean_optimizer_used),
+            },
+            clean_energy_path.open("w"),
+            indent=2,
+        )
 
     # ------------------------------------------------------------------
     # 2) Gas molecules
@@ -358,26 +386,50 @@ def calc_nanoparticle_orr_overpotential_from_target(
     gas_dir = structures_dir / "gas"
     gas_dir.mkdir(parents=True, exist_ok=True)
 
-    def _gas_energy(name: str) -> float:
+    def _optimize_gas_with_retry(name: str) -> tuple[Atoms, float, str]:
+        optimizer_used = str(optimizer)
+        try:
+            opt, e = optimize_gas_molecule(
+                name,
+                gas_box_size=15.0,
+                work_directory=str(gas_dir / name),
+                calculator=calculator,
+                optimizer=optimizer_used,
+                max_opt_steps=max_opt_steps,
+                yaml_path=vasp_yaml_path,
+            )
+            if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(opt)):
+                raise ValueError("Non-finite gas optimization result")
+            return opt, float(e), optimizer_used
+        except Exception:
+            _cuda_cleanup()
+            optimizer_used = str(retry_optimizer)
+            opt, e = optimize_gas_molecule(
+                name,
+                gas_box_size=15.0,
+                work_directory=str(gas_dir / name),
+                calculator=calculator,
+                optimizer=optimizer_used,
+                max_opt_steps=1000,
+                yaml_path=vasp_yaml_path,
+            )
+            if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(opt)):
+                raise ValueError("Non-finite gas optimization result after retry")
+            return opt, float(e), optimizer_used
+
+    def _gas_energy(name: str) -> tuple[float, str]:
         p = gas_dir / name / "opt_result.json"
         if p.exists() and not overwrite:
-            return float(json.load(p.open())["E_opt"])
+            payload = json.load(p.open())
+            return float(payload["E_opt"]), str(payload.get("optimizer", optimizer))
         (gas_dir / name).mkdir(parents=True, exist_ok=True)
-        opt, e = optimize_gas_molecule(
-            name,
-            gas_box_size=15.0,
-            work_directory=str(gas_dir / name),
-            calculator=calculator,
-            optimizer=optimizer,
-            max_opt_steps=max_opt_steps,
-            yaml_path=vasp_yaml_path,
-        )
+        opt, e, optimizer_used = _optimize_gas_with_retry(name)
         _write_extxyz(gas_dir / name / "opt.extxyz", opt, energy=e)
-        json.dump({"E_opt": float(e)}, p.open("w"), indent=2)
-        return float(e)
+        json.dump({"E_opt": float(e), "optimizer": str(optimizer_used)}, p.open("w"), indent=2)
+        return float(e), str(optimizer_used)
 
-    E_H2 = _gas_energy("H2")
-    E_H2O = _gas_energy("H2O")
+    E_H2, h2_optimizer_used = _gas_energy("H2")
+    E_H2O, h2o_optimizer_used = _gas_energy("H2O")
 
     # Derive all other gas references from H2/H2O (CHE-style) so we do not depend on
     # gas-phase O/OH/OOH energetics.
@@ -674,6 +726,11 @@ def calc_nanoparticle_orr_overpotential_from_target(
         "vacuum_size_A": float(vacuum_size),
         "gas_box_A": float(gas_box),
         "random_seed": int(random_seed),
+        "clean_relaxation": {"optimizer": str(clean_optimizer_used)},
+        "gas_relaxation": {
+            "H2": {"optimizer": str(h2_optimizer_used)},
+            "H2O": {"optimizer": str(h2o_optimizer_used)},
+        },
         "n_samples": int(n_samples),
         "coverages_used": list(coverages_to_run),
         "E_clean_eV": float(clean_energy),
