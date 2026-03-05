@@ -629,7 +629,7 @@ def my_calculator(
         from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
         from ase.filters import FrechetCellFilter
 
-        predictor = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device="cuda")
         fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
         atoms.calc = ProtectedCalculator(fairchem_calculator)
 
