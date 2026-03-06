@@ -311,7 +311,8 @@ def my_calculator(
     Args:
         atoms: ASE atoms object
         kind: "gas" / "slab" / "bulk"
-        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "7net-omni_*" / "fairchem" / "qe"
+        calculator: "vasp" / "mace" / "mace-d3" / "orb-v3" / "7net" / "7net-omni_*" /
+            "uma-omat" / "uma-oc20" / "uma-oc22" / "uma-oc25" / "qe"
             - For 7net-omni, use "7net-omni_<modal>" (e.g., "7net-omni_mpa", "7net-omni_oc20")
         yaml_path: Path to YAML configuration file (or set VASP_YAML_PATH env var)
         calc_directory: Calculation directory for VASP
@@ -621,69 +622,34 @@ def my_calculator(
         else:
             atoms = atoms
 
-    elif calculator == "uma-s" or calculator == "fairchem":
-        from fairchem.core.calculate import pretrained_mlip                    
+    elif calculator in {"uma-omat", "uma-oc20", "uma-oc22", "uma-oc25"}:
+        from fairchem.core.calculate import pretrained_mlip
         from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
-        from fairchem.core.units.mlip_unit.api.inference import InferenceSettings  
-
         from ase.filters import FrechetCellFilter
-        from ase.optimize import FIRE, FIRE2, LBFGS, BFGSLineSearch
+        from ase.optimize import BFGSLineSearch
 
+        task_name_map = {
+            "uma-omat": "omat",
+            "uma-oc20": "oc20",
+            "uma-oc22": "oc22",
+            "uma-oc25": "oc25",
+        }
         device = get_device()
-        predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device=device)
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1p2", device=device)
+        fairchem_calculator = FAIRChemCalculator(predictor, task_name=task_name_map[calculator])
+        atoms.calc = ProtectedCalculator(fairchem_calculator)
+
+        if kind == "gas":
+            atoms.set_pbc(False)
 
         if kind == "bulk":
-            # Bulk optimization step: Use "omat" task
-            fairchem_bulk_calculator = FAIRChemCalculator(predictor, task_name="omat")
-            atoms.calc = ProtectedCalculator(fairchem_bulk_calculator)
-            
-            # Apply FrechetCellFilter
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
             optimizer = BFGSLineSearch(atoms)
             optimizer.run(fmax=fmax, steps=steps)
-            
-            # Extract atoms from filter
-            atoms = atoms.atoms 
-
-        else: # For "slab" and "gas" optimization step: Use "oc20" task
-            fairchem_calculator = FAIRChemCalculator(predictor, task_name="oc20")
-            atoms.calc = ProtectedCalculator(fairchem_calculator)
-
-            # delete PBC for gas phase calculations
-            if kind == "gas":
-                atoms.set_pbc(False)
-
-            # Perform structure optimization
+            atoms = atoms.atoms
+        else:
             optimizer = BFGSLineSearch(atoms)
             optimizer.run(fmax=fmax, steps=steps)
-
-    elif calculator == "esen-oc25":
-        from fairchem.core import pretrained_mlip, FAIRChemCalculator
-        from ase.optimize import BFGSLineSearch
-        from omegaconf import OmegaConf
-
-        device = get_device()
-        predictor = pretrained_mlip.get_predict_unit("esen-sm-conserving-all-oc25", device=device)
-        fairchem_calculator = FAIRChemCalculator(predictor)
-
-        if len(atoms) == 1:
-            task_name = fairchem_calculator.task_name
-            atomic_number = int(atoms.get_atomic_numbers()[0])
-            charge = atoms.info.get("charge", 0)
-
-            energy = _lookup_atom_reference(
-                predictor.atom_refs, task_name, atomic_number, charge=charge
-            )
-            if energy is None:
-                raise ValueError(f"No atomic reference energy found for Z={atomic_number} in task '{task_name}'.")
-
-            atoms.calc = AtomReferenceCalculator(energy, len(atoms))
-            return atoms
-
-        atoms.calc = ProtectedCalculator(fairchem_calculator)
-
-        optimizer = BFGSLineSearch(atoms)
-        optimizer.run(fmax=fmax, steps=steps)
 
     elif calculator == "qe":
         from ase.calculators.espresso import Espresso, EspressoProfile
@@ -754,7 +720,7 @@ def my_calculator(
         raise ValueError(
             "calculator must be 'vasp', 'mace', 'mace-d3', 'mace-mh', 'mace-mh-d3', "
             "'mace-mh-oc20', 'mace-mh-oc20-d3', 'orb-v3', '7net', '7net-omni_<modal>', "
-            "'uma-s', 'fairchem', or 'qe'"
+            "'uma-omat', 'uma-oc20', 'uma-oc22', 'uma-oc25', or 'qe'"
         )
 
     return atoms

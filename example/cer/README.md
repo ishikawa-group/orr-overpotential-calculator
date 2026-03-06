@@ -23,18 +23,18 @@ The main script is:
 Run all materials found in the rutile bulk directory:
 
 ```bash
-python example/cer/code/oxide_oer_cer_.py --calculator esen-oc25
+python example/cer/code/oxide_oer_cer_.py --calculator uma-oc20
 ```
 
 Run selected materials:
 
 ```bash
-python example/cer/code/oxide_oer_cer_.py --calculator esen-oc25 --materials RuO2 MnO2
+python example/cer/code/oxide_oer_cer_.py --calculator uma-oc20 --materials RuO2 MnO2
 ```
 
 Notes:
 
-- `esen-oc25` uses FAIRChem’s OC25 model; the first run downloads weights from Hugging Face.
+- `uma-omat|uma-oc20|uma-oc22|uma-oc25` は FAIRChem UMA-S-1p2 を用いる。
 - You can change the bulk data location with `--data-dir`.
 
 ## Outputs

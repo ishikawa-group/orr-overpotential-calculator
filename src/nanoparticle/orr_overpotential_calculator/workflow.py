@@ -282,7 +282,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     outdir: str = "result/nanoparticle_orr",
     overwrite: bool = False,
     log_level: str = "INFO",
-    calculator: str = "esen-oc25",
+    calculator: str = "uma-oc20",
     optimizer: str = "LBFGSLineSearch",
     max_opt_steps: int = 300,
     retry_optimizer: str = "FIRE",

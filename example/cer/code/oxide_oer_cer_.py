@@ -141,11 +141,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="OER/CER on rutile MO2 high-coverage surfaces")
     parser.add_argument(
         "--calculator",
-        default="esen-oc25",
+        default="uma-oc20",
         choices=[
             "mace", "mace-d3", "mace-mh", "mace-mh-d3",
-            "mace-mh-oc20", "mace-mh-oc20-d3", "uma-s",
-            "esen-oc25", "vasp", "fairchem",
+            "mace-mh-oc20", "mace-mh-oc20-d3",
+            "uma-omat", "uma-oc20", "uma-oc22", "uma-oc25",
+            "vasp",
         ],
         help="Calculator to use",
     )
