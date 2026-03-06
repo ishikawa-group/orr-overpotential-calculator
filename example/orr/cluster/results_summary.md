@@ -22,7 +22,7 @@ import numpy as np
 from ase import Atoms
 from ase.io import write
 from ase.cluster.octahedron import Octahedron
-from surface.orr_overpotential_calculator import place_adsorbate
+from orr_overpotential_calculator.nanoparticle.orr import place_adsorbate
 import os
 
 # Create an octahedral Pt cluster with edge length of 4 atoms
@@ -90,16 +90,16 @@ from ase.build import fcc111
 from ase.cluster.octahedron import Octahedron
 
 # Import ORR overpotential calculation function
-from surface.orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
+from orr_overpotential_calculator.nanoparticle.orr import calc_cluster_orr_overpotential
 
 #---------------------
 # Parameter settings
 #---------------------
-base_dir = str(Path(__file__).parent / "Pt_nanoparticle_mattersim")
-force = True                    # Overwrite existing calculations
+outdir = str(Path(__file__).parent / "Pt_nanoparticle_mattersim")
+overwrite = True                    # Overwrite existing calculations
 log_level = "INFO"              # Logging level
-calc_type = "mattersim"         # Calculation engine
-yaml_path = str(Path(__file__).parent / "vasp.yaml")  # Configuration file
+calculator = "mattersim"         # Calculation engine
+vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")  # Configuration file
 
 # Create Pt nanoparticle cluster (octahedron, edge length 4 atoms)
 cluster = Octahedron('Pt', length=4, cutoff=0) 
@@ -112,14 +112,14 @@ orr_adsorbates: Dict[str, List[Tuple]] = {
 }
 
 # Function call: receive results as dictionary
-result = calc_nanoparticle_orr_overpotential(
-    nanoparticle=cluster,
-    base_dir=base_dir,
-    force=force,
+result = calc_cluster_orr_overpotential(
+    cluster=cluster,
+    outdir=outdir,
+    overwrite=overwrite,
     log_level=log_level,
-    calc_type=calc_type,
+    calculator=calculator,
     adsorbates=orr_adsorbates,
-    yaml_path=yaml_path
+    vasp_yaml_path=vasp_yaml_path
 )
 
 # Extract required values from the dictionary
@@ -226,16 +226,16 @@ You can switch between different calculation methods:
 
 ```python
 # Use VASP calculator
-result = calc_nanoparticle_orr_overpotential(
-    nanoparticle=cluster,
-    calc_type="vasp",
-    yaml_path="path/to/vasp.yaml"
+result = calc_cluster_orr_overpotential(
+    cluster=cluster,
+    calculator="vasp",
+    vasp_yaml_path="path/to/vasp.yaml"
 )
 
 # Use machine learning potential
-result = calc_nanoparticle_orr_overpotential(
-    nanoparticle=cluster,
-    calc_type="mattersim"
+result = calc_cluster_orr_overpotential(
+    cluster=cluster,
+    calculator="mattersim"
 )
 ```
 
@@ -258,15 +258,15 @@ from ase.build import fcc111
 from ase.cluster.octahedron import Octahedron
 
 # Import ORR overpotential calculation function
-from surface.orr_overpotential_calculator import calc_nanoparticle_orr_overpotential
+from orr_overpotential_calculator.nanoparticle.orr import calc_cluster_orr_overpotential
 
 #---------------------
 # Parameter settings
-base_dir = str(Path(__file__).parent.parent / "Pt_nanoparticle_vasp/length_2")
-force = True
+outdir = str(Path(__file__).parent.parent / "Pt_nanoparticle_vasp/length_2")
+overwrite = True
 log_level = "INFO"
-calc_type = "vasp"
-yaml_path = str(Path(__file__).parent / "vasp.yaml")
+calculator = "vasp"
+vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")
 #----------------
 
 cluster = Octahedron('Pt', length=2, cutoff=0) 
@@ -286,14 +286,14 @@ orr_adsorbates: Dict[str, List[Tuple]] = {
 # }
 
 # Function call: receive results as dictionary
-result = calc_nanoparticle_orr_overpotential(
-    nanoparticle=cluster,
-    base_dir=base_dir,
-    force=force,
+result = calc_cluster_orr_overpotential(
+    cluster=cluster,
+    outdir=outdir,
+    overwrite=overwrite,
     log_level=log_level,
-    calc_type=calc_type,
+    calculator=calculator,
     adsorbates=orr_adsorbates,
-    yaml_path=yaml_path
+    vasp_yaml_path=vasp_yaml_path
 )
 
 # Extract required values from the dictionary
@@ -325,7 +325,7 @@ from pathlib import Path
 from typing import Dict
 
 # Import tool modules from ORR calculator
-from surface.orr_overpotential_calculator import generate_result_csv, plot_free_energy_diagram
+from orr_overpotential_calculator.nanoparticle.orr import generate_result_csv, plot_free_energy_diagram
 
 # Base path settings
 base_dir = Path(__file__).parent.parent

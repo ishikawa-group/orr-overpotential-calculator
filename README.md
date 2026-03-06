@@ -22,7 +22,7 @@ pip install git+https://github.com/ishikawa-group/orr-overpotential-calculator.g
 ### From Pre-built Wheel
 
 ```bash
-pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
+pip install orr_overpotential_calculator-0.2.0-py3-none-any.whl
 ```
 
 ## Quick Start
@@ -49,7 +49,7 @@ eta = result["eta"]
 print(f"ORR overpotential: {eta:.3f} V")
 ```
 
-* OER workflows are available via `oer_overpotential_calculator`:
+* OER workflows are available via `orr_overpotential_calculator.surface.oer`:
 
 ```python
 from ase.build import fcc111
