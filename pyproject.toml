@@ -14,8 +14,10 @@ dependencies = [
     "ase",
     "pyqt5",
     "pyyaml",
-    "fairchem-core>=2.16.0",
 ]
+
+[project.optional-dependencies]
+fairchem = ["fairchem-core>=2.16.0"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
