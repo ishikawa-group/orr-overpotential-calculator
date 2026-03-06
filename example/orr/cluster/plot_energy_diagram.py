@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Dict
 
 # ORAカリキュレーターのツールモジュールをインポート
-from surface.orr_overpotential_calculator import generate_result_csv, plot_free_energy_diagram
+from orr_overpotential_calculator.nanoparticle.orr import (
+    generate_result_csv,
+    plot_free_energy_diagram,
+)
 
 # 基本パスの設定
 base_dir = Path(__file__).parent.parent

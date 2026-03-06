@@ -22,7 +22,7 @@ The overpotential η is determined by the most unfavorable reaction step.
 #!/usr/bin/env python3
 from pathlib import Path
 from ase.build import fcc111
-from orr_overpotential_calculator import calc_orr_overpotential
+from orr_overpotential_calculator.surface.orr import calc_orr_overpotential
 
 # Parameter settings
 outdir = str(Path(__file__).parent / "Pt111")
@@ -66,7 +66,7 @@ print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
 
 ````python
 
-from orr_overpotential_calculator import generate_result_csv, create_orr_volcano_plot
+from orr_overpotential_calculator.surface.orr import generate_result_csv, create_orr_volcano_plot
 from pathlib import Path
 
 script_dir = Path(__file__).parent
@@ -165,4 +165,3 @@ Adsorption sites are specified using fractional coordinates:
 
 1. Nørskov, J. K. et al. (2004). Origin of the Overpotential for Oxygen Reduction at a Fuel-Cell Cathode. *J. Phys. Chem. B*, 108, 17886-17892.
 2. Zhang, Q. & Asthagiri, A. (2019). Solvation effects on DFT predictions of ORR activity on metal surfaces. *Catal. Today*, 323, 35-43.
-

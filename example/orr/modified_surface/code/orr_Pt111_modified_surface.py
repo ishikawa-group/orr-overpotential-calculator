@@ -9,7 +9,7 @@ from ase.build import fcc111
 from ase import Atoms
 
 # ORR過電圧計算関数をインポート
-from surface.orr_overpotential_calculator import calc_orr_overpotential_modified
+from orr_overpotential_calculator.surface.orr import calc_orr_overpotential_modified
 
 # ---------------------
 # 引数の設定

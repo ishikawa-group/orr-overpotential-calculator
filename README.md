@@ -37,7 +37,7 @@ pip install orr_overpotential_calculator-0.1.0-py3-none-any.whl
 
 ```python
 from ase.build import fcc111
-from surface.orr_overpotential_calculator import calc_orr_overpotential
+from orr_overpotential_calculator.surface.orr import calc_orr_overpotential
 
 # Create a Pt(111) surface
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
@@ -53,7 +53,7 @@ print(f"ORR overpotential: {eta:.3f} V")
 
 ```python
 from ase.build import fcc111
-from surface.oer_overpotential_calculator import calc_oer_overpotential
+from orr_overpotential_calculator.surface.oer import calc_oer_overpotential
 
 bulk = fcc111("Ir", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 result = calc_oer_overpotential(bulk=bulk, outdir="oer_result")
@@ -89,7 +89,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
 from ase.build import fcc111
-from surface.orr_overpotential_calculator import calc_orr_overpotential
+from orr_overpotential_calculator.surface.orr import calc_orr_overpotential
 
 # Configuration parameters
 outdir = str(Path(__file__).parent / "Pt111")
@@ -136,7 +136,7 @@ print(f"Limiting potential: {limiting_potential:.3f} V")
 
 ```python
 from ase.build import fcc111
-from surface.orr_overpotential_calculator import calc_orr_overpotential
+from orr_overpotential_calculator.surface.orr import calc_orr_overpotential
 
 bulk = fcc111("Pt", size=(3, 3, 4), a=3.9, vacuum=None, periodic=True)
 

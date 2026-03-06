@@ -1,5 +1,14 @@
 """CER (Chlorine Evolution Reaction) Overpotential Calculator"""
 
+import warnings
+
+warnings.warn(
+    "surface.cer_overpotential_calculator is deprecated; "
+    "use orr_overpotential_calculator.surface.cer instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 __version__ = "0.1.0"
 
 # Main workflow functions

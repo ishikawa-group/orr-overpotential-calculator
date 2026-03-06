@@ -32,8 +32,8 @@ import numpy as np
 from ase.io import read
 from ase.build import surface, make_supercell
 
-from surface.oer_overpotential_calculator import calc_oer_overpotential
-from surface.cer_overpotential_calculator import calc_cer_overpotential
+from orr_overpotential_calculator.surface.cer import calc_cer_overpotential
+from orr_overpotential_calculator.surface.oer import calc_oer_overpotential
 
 
 def _plot_oer_vs_cer(rows: List[dict], plot_path: Path, title_suffix: str) -> None:

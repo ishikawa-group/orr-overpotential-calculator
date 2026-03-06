@@ -22,7 +22,7 @@ The overpotential η is determined by the most unfavorable reaction step.
 #!/usr/bin/env python3
 from pathlib import Path
 from ase.build import fcc111
-from surface.orr_overpotential_calculator import calc_orr_overpotential
+from orr_overpotential_calculator.surface.orr import calc_orr_overpotential
 
 # Parameter settings
 outdir = str(Path(__file__).parent / "Pt111")
@@ -66,7 +66,7 @@ print(f"Reaction Free Energy Change at U=1.23V: {diffG_eq}")
 
 ````python
 
-from surface.orr_overpotential_calculator import generate_result_csv, create_orr_volcano_plot
+from orr_overpotential_calculator.surface.orr import generate_result_csv, create_orr_volcano_plot
 from pathlib import Path
 
 script_dir = Path(__file__).parent

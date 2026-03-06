@@ -11,8 +11,8 @@ For each rutile `MO2` bulk structure (`*_opt_bulk.xyz`) it builds two slabs:
 
 Then it computes:
 
-- OER overpotential `η_OER` on the **vacancy** slab (via `surface.oer_overpotential_calculator.calc_oer_overpotential`)
-- CER overpotential `η_CER(OCl*)` on the **full-coverage** slab (via `surface.cer_overpotential_calculator.calc_cer_overpotential(intermediate="OCl*")`)
+- OER overpotential `η_OER` on the **vacancy** slab (via `orr_overpotential_calculator.surface.oer.calc_oer_overpotential`)
+- CER overpotential `η_CER(OCl*)` on the **full-coverage** slab (via `orr_overpotential_calculator.surface.cer.calc_cer_overpotential(intermediate="OCl*")`)
 
 ## How to run
 

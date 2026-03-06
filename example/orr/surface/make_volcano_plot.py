@@ -1,4 +1,7 @@
-from surface.orr_overpotential_calculator import generate_result_csv, create_orr_volcano_plot
+from orr_overpotential_calculator.surface.orr import (
+    create_orr_volcano_plot,
+    generate_result_csv,
+)
 from pathlib import Path
 
 

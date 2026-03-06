@@ -1,5 +1,14 @@
 """ORR Overpotential Calculator"""
 
+import warnings
+
+warnings.warn(
+    "surface.orr_overpotential_calculator is deprecated; "
+    "use orr_overpotential_calculator.surface.orr instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 __version__ = "0.1.0"
 
 # Main workflow functions
