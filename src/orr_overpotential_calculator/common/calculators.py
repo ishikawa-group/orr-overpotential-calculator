@@ -294,12 +294,27 @@ def my_calculator(
         }
         device = get_device()
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p2", device=device)
-        fairchem_calculator = FAIRChemCalculator(predictor, task_name=task_name_map[calculator])
+        task_name = task_name_map[calculator]
+
+        if kind == "gas" and len(atoms) == 1:
+            ref_energy = _lookup_atom_reference(
+                predictor.atom_refs,
+                task_name,
+                int(atoms.numbers[0]),
+                charge=0,
+            )
+            if ref_energy is not None:
+                atoms.set_pbc(False)
+                atoms.calc = AtomReferenceCalculator(float(ref_energy), len(atoms))
+                return atoms
+
+        fairchem_calculator = FAIRChemCalculator(predictor, task_name=task_name)
         atoms.calc = ProtectedCalculator(fairchem_calculator)
 
         if kind == "gas":
             atoms.set_pbc(False)
-        if kind == "bulk":
+        supports_stress = "stress" in getattr(fairchem_calculator, "implemented_properties", [])
+        if kind == "bulk" and supports_stress:
             atoms = FrechetCellFilter(atoms, hydrostatic_strain=True)
 
         optimizer_cls(atoms).run(fmax=fmax, steps=steps)

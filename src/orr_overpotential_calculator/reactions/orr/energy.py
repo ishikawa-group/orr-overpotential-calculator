@@ -62,6 +62,21 @@ ADSORBATE_HEIGHT = 2.0  # Initial height of adsorbate above surface
 # ----------------------------------------------------------------------
 
 
+def _normalize_optimizer_and_yaml_path(
+    optimizer: Optional[str],
+    yaml_path: Optional[str],
+) -> Tuple[str, Optional[str]]:
+    """Preserve compatibility with older positional calls."""
+    if optimizer is None:
+        return "LBFGSLineSearch", yaml_path
+
+    if yaml_path is None and isinstance(optimizer, str):
+        if optimizer.endswith((".yaml", ".yml")) or os.path.sep in optimizer:
+            return "LBFGSLineSearch", optimizer
+
+    return optimizer, yaml_path
+
+
 def optimize_gas_molecule(
     molecule_name: str,
     gas_box_size: float,
@@ -84,6 +99,7 @@ def optimize_gas_molecule(
     Returns:
         Tuple of optimized Atoms object and energy (eV)
     """
+    optimizer, yaml_path = _normalize_optimizer_and_yaml_path(optimizer, yaml_path)
     molecule = MOLECULES[molecule_name].copy()
     molecule.set_cell([gas_box_size, gas_box_size, gas_box_size])
     molecule.set_pbc(True)
@@ -126,6 +142,7 @@ def optimize_bulk_structure(
     Returns:
         Tuple of optimized Atoms object and energy (eV)
     """
+    optimizer, yaml_path = _normalize_optimizer_and_yaml_path(optimizer, yaml_path)
     bulk_structure = bulk_atoms.copy()
     bulk_structure.set_pbc(True)
     bulk_structure = set_initial_magmoms(bulk_structure, kind="bulk")
@@ -168,6 +185,7 @@ def optimize_slab_structure(
     Returns:
         Tuple of optimized slab Atoms object and energy (eV)
     """
+    optimizer, yaml_path = _normalize_optimizer_and_yaml_path(optimizer, yaml_path)
     slab = input_structure.copy()
     slab.set_pbc(True)
 
@@ -211,6 +229,7 @@ def optimize_cluster_structure(
     Returns:
         Tuple of optimized Atoms object and energy (eV)
     """
+    optimizer, yaml_path = _normalize_optimizer_and_yaml_path(optimizer, yaml_path)
     cluster_atoms = cluster.copy()
     cluster_atoms.set_cell([gas_box_size, gas_box_size, gas_box_size])
     cluster_atoms.set_pbc(True)
@@ -250,6 +269,7 @@ def optimize_cluster_with_gas(
     Returns:
         Tuple of optimized Atoms object and energy (eV)
     """
+    optimizer, yaml_path = _normalize_optimizer_and_yaml_path(optimizer, yaml_path)
     cluster_gas_atoms = cluster_gas.copy()
     cluster_gas_atoms.set_pbc(True)
     cluster_gas_atoms = set_initial_magmoms(
