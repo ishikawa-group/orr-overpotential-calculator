@@ -7,6 +7,8 @@ from .calculators import (
     get_device,
     my_calculator,
     resolve_vasp_yaml_path,
+    run_relaxation,
+    supports_stress,
 )
 from .constraints import fix_lower_surface
 from .magnetism import set_initial_magmoms
@@ -29,7 +31,9 @@ __all__ = [
     "parallel_displacement",
     "place_adsorbate",
     "resolve_vasp_yaml_path",
+    "run_relaxation",
     "set_initial_magmoms",
     "set_tags_by_z",
     "sort_atoms",
+    "supports_stress",
 ]

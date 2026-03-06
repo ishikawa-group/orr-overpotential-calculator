@@ -36,6 +36,7 @@ from .energy import (
     calculate_adsorption_with_indices,
     attach_modifier_to_surface,
 )
+from ...common.calculators import supports_stress
 from ...common.serialization import convert_numpy_types
 
 np.set_printoptions(precision=3)
@@ -73,6 +74,12 @@ ADSORBATE_HEIGHT = 2.0
 
 # Logger setup
 logger = logging.getLogger("orr_workflow")
+
+
+def _write_bulk_relaxation_metadata(path: Path, payload: Dict[str, Any]) -> None:
+    """Persist bulk relaxation metadata for later inspection."""
+    with path.open("w") as handle:
+        json.dump(convert_numpy_types(payload), handle, indent=2)
 
 # ---------------------------------------------------------------------------
 # Adsorption Energy Calculation Functions (Offset-based)
@@ -605,6 +612,8 @@ def calc_orr_overpotential(
         solvent_correction_yaml_path: str = None,
         opt_bulk: bool = True,
         surface: Optional[Atoms] = None,
+        bulk_relax_mode: str = "positions_only",
+        bulk_cell_calculator: Optional[str] = None,
         default_solvent_corrections: Tuple[float, float, float] = (0.0, 0.25, 0.5),
     ) -> Dict[str, Any]:
     """
@@ -621,6 +630,11 @@ def calc_orr_overpotential(
         solvent_correction_yaml_path: Path to solvent correction YAML file
         opt_bulk: Whether to optimize the bulk structure (default True)
         surface: Pre-built slab structure to use when skipping bulk optimization
+        bulk_relax_mode: Bulk relaxation mode. "positions_only" keeps the input cell
+            fixed, while "cell_and_positions" first relaxes the cell and then reruns
+            a fixed-cell position relaxation.
+        bulk_cell_calculator: Optional calculator used only for the cell+positions
+            bulk stage when `bulk_relax_mode="cell_and_positions"`.
 
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -648,16 +662,73 @@ def calc_orr_overpotential(
 
     slab_input: Atoms
     bulk_energy: Optional[float] = None
+    bulk_relaxation_payload: Optional[Dict[str, Any]] = None
 
     if opt_bulk:
         if bulk is None:
             raise ValueError("bulk must be provided when opt_bulk is True")
-        # 1. Bulk optimization
-        logger.info("Optimizing bulk structure...")
-        optimized_bulk, bulk_energy = optimize_bulk_structure(
-            bulk, str(outdir_path / "bulk"), calculator, vasp_yaml_path
-        )
+        if bulk_relax_mode not in {"positions_only", "cell_and_positions"}:
+            raise ValueError(
+                f"Unsupported bulk_relax_mode: {bulk_relax_mode!r}. "
+                "Use 'positions_only' or 'cell_and_positions'."
+            )
+        if bulk_relax_mode == "positions_only" and bulk_cell_calculator is not None:
+            raise ValueError(
+                "bulk_cell_calculator can only be used when bulk_relax_mode='cell_and_positions'."
+            )
+
+        bulk_dir = outdir_path / "bulk"
+        position_calculator = calculator
+        cell_calculator = bulk_cell_calculator or calculator
+
+        if bulk_relax_mode == "cell_and_positions":
+            if not supports_stress(cell_calculator):
+                raise ValueError(
+                    f"Calculator {cell_calculator!r} does not support stress-based cell relaxation."
+                )
+            logger.info("Optimizing bulk cell and atomic positions...")
+            optimized_bulk_cell, bulk_cell_energy = optimize_bulk_structure(
+                bulk,
+                str(bulk_dir / "cell_stage"),
+                calculator=cell_calculator,
+                yaml_path=vasp_yaml_path,
+                relax_cell=True,
+            )
+            write(str(bulk_dir / "optimized_bulk_cell.extxyz"), optimized_bulk_cell)
+
+            logger.info("Optimizing bulk atomic positions with fixed cell...")
+            optimized_bulk, bulk_energy = optimize_bulk_structure(
+                optimized_bulk_cell,
+                str(bulk_dir / "position_stage"),
+                calculator=position_calculator,
+                yaml_path=vasp_yaml_path,
+                relax_cell=False,
+            )
+            bulk_relaxation_payload = {
+                "mode": bulk_relax_mode,
+                "cell_calculator": cell_calculator,
+                "position_calculator": position_calculator,
+                "cell_stage_energy_eV": float(bulk_cell_energy),
+                "final_energy_eV": float(bulk_energy),
+            }
+        else:
+            logger.info("Optimizing bulk atomic positions with fixed cell...")
+            optimized_bulk, bulk_energy = optimize_bulk_structure(
+                bulk,
+                str(bulk_dir / "position_stage"),
+                calculator=position_calculator,
+                yaml_path=vasp_yaml_path,
+                relax_cell=False,
+            )
+            bulk_relaxation_payload = {
+                "mode": bulk_relax_mode,
+                "cell_calculator": None,
+                "position_calculator": position_calculator,
+                "final_energy_eV": float(bulk_energy),
+            }
+
         write(str(outdir_path / "bulk" / "optimized_bulk.extxyz"), optimized_bulk)
+        _write_bulk_relaxation_metadata(outdir_path / "bulk" / "bulk_relaxation.json", bulk_relaxation_payload)
         slab_input = optimized_bulk
     else:
         if surface is None:
@@ -694,12 +765,19 @@ def calc_orr_overpotential(
     # Add E_bulk to orr_results for external access
     if bulk_energy is not None:
         orr_results["E_bulk"] = float(bulk_energy)
+    if bulk_relaxation_payload is not None:
+        orr_results["bulk_relaxation"] = bulk_relaxation_payload
 
     # 5. Write summary
     with (outdir_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary ---\n\n")
         if bulk_energy is not None:
             f.write(f"E_bulk = {bulk_energy:.6f} eV\n")
+            if bulk_relaxation_payload is not None:
+                f.write(f"bulk_relax_mode = {bulk_relaxation_payload['mode']}\n")
+                f.write(f"bulk_position_calculator = {bulk_relaxation_payload['position_calculator']}\n")
+                if bulk_relaxation_payload["cell_calculator"] is not None:
+                    f.write(f"bulk_cell_calculator = {bulk_relaxation_payload['cell_calculator']}\n")
         else:
             f.write("E_bulk = N/A (bulk optimization skipped)\n")
         f.write(json.dumps(convert_numpy_types(energies), indent=2))

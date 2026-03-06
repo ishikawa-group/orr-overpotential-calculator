@@ -23,7 +23,7 @@ from ase.io import write
 
 # Add custom module path
 from ...common.adsorbate import place_adsorbate
-from ...common.calculators import my_calculator
+from ...common.calculators import my_calculator, run_relaxation
 from ...common.constraints import fix_lower_surface
 from ...common.magnetism import set_initial_magmoms
 from ...common.serialization import convert_numpy_types
@@ -128,7 +128,8 @@ def optimize_bulk_structure(
     calculator: str = "mace",
     optimizer: str = "LBFGSLineSearch",
     max_opt_steps: int = 300,
-    yaml_path: Optional[str] = None
+    yaml_path: Optional[str] = None,
+    relax_cell: bool = True,
     ) -> Tuple[Atoms, float]:
     """
     Optimize bulk crystal structure and calculate energy.
@@ -138,6 +139,7 @@ def optimize_bulk_structure(
         work_directory: Directory for calculation files
         calculator: Calculator type ("vasp", "mace")
         yaml_path: Path to VASP configuration file
+        relax_cell: Whether to relax the cell together with atomic positions
         
     Returns:
         Tuple of optimized Atoms object and energy (eV)
@@ -147,13 +149,14 @@ def optimize_bulk_structure(
     bulk_structure.set_pbc(True)
     bulk_structure = set_initial_magmoms(bulk_structure, kind="bulk")
     
-    optimized_bulk = my_calculator(
+    optimized_bulk = run_relaxation(
         bulk_structure, "bulk",
         calculator=calculator,
         optimizer=optimizer,
         max_opt_steps=max_opt_steps,
         yaml_path=yaml_path,
-        calc_directory=work_directory
+        calc_directory=work_directory,
+        relax_cell=relax_cell,
     )
     
     energy = optimized_bulk.get_potential_energy()
