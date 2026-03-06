@@ -1,53 +1,71 @@
+#!/usr/bin/env python3
+"""Run OER surface calculations for the metals listed below."""
+
 from pathlib import Path
 from typing import Dict, List, Tuple
+
 from ase.build import fcc111
-from oer_overpotential_calculator import calc_oer_overpotential
 
-metals = ["Ni"]
-# metals = ["Ni", "Cu", "Rh", "Pd", "Ag", "Ir", "Pt", "Au"]
+from orr_overpotential_calculator.surface.oer import calc_oer_overpotential
 
-# Ref for lattice constants: https://periodictable.com/Properties/A/LatticeConstants.html
-lattice_constants = {"Ni": 3.524, "Cu": 3.615, "Rh": 3.803, "Pd": 3.891, "Ag": 4.085, "Ir": 3.839,
-                     "Pt": 3.924, "Au": 4.078}
+METALS = ["Ni"]
+# METALS = ["Ni", "Cu", "Rh", "Pd", "Ag", "Ir", "Pt", "Au"]
 
-# --- parameters
-overwrite = True
-log_level = "INFO"
-calculator = "mace"
-vasp_yaml_path = str(Path(__file__).parent / "vasp.yaml")
-solvent_correction_yaml_path = str(Path(__file__).parent / "solvent_correction.yaml")
-result_dir = Path(__file__).parent / "result"
-# ---
+# Ref: https://periodictable.com/Properties/A/LatticeConstants.html
+LATTICE_CONSTANTS = {
+    "Ni": 3.524,
+    "Cu": 3.615,
+    "Rh": 3.803,
+    "Pd": 3.891,
+    "Ag": 4.085,
+    "Ir": 3.839,
+    "Pt": 3.924,
+    "Au": 4.078,
+}
 
-for metal in metals:
-    outdir = result_dir / (metal + "111")
-    outdir.mkdir(parents=True, exist_ok=True)
+OVERWRITE = True
+LOG_LEVEL = "INFO"
+CALCULATOR = "mace"
+VASP_YAML_PATH = str(Path(__file__).parent / "vasp.yaml")
+SOLVENT_CORRECTION_YAML_PATH = str(Path(__file__).parent / "solvent_correction.yaml")
+RESULT_DIR = Path(__file__).parent / "result"
 
-    bulk = fcc111(metal, size=(3, 3, 4), a=lattice_constants[metal], vacuum=None, periodic=True)
-    oer_adsorbates: Dict[str, List[Tuple[float, float]]] = {
-        "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],  # ontop, bridge, fcc, hcp
-        "O":   [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
-        "OH":  [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
-    }
+OER_ADSORBATES: Dict[str, List[Tuple[float, float]]] = {
+    "HO2": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
+    "O": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
+    "OH": [(0.0, 0.0), (0.5, 0.0), (0.33, 0.33), (0.66, 0.66)],
+}
 
-    result = calc_oer_overpotential(
-        bulk=bulk,
-        outdir=outdir,
-        overwrite=overwrite,
-        log_level=log_level,
-        calculator=calculator,
-        adsorbates=oer_adsorbates,
-        vasp_yaml_path=vasp_yaml_path,
-        solvent_correction_yaml_path=solvent_correction_yaml_path
-    )
 
-    eta = result["eta"]
-    u_l = result["U_L"]
-    diffG_U0 = result["diffG_U0"]
-    diffG_eq = result["diffG_eq"]
+def main() -> None:
+    for metal in METALS:
+        outdir = RESULT_DIR / f"{metal}111"
+        outdir.mkdir(parents=True, exist_ok=True)
 
-    print(f"------- metal = {metal} -------")
-    print(f"OER overpotential: {eta:.3f} [V]")
-    print(f"Limiting potential: {u_l:.3f} [V]")
-    print("Reaction Free Energy Change at U = 0 [V]:", [f"{x:.3f}" for x in diffG_U0])
-    print("Reaction Free Energy Change at U = 1.23 [V]:", [f"{x:.3f}" for x in diffG_eq])
+        bulk = fcc111(
+            metal,
+            size=(3, 3, 4),
+            a=LATTICE_CONSTANTS[metal],
+            vacuum=None,
+            periodic=True,
+        )
+        result = calc_oer_overpotential(
+            bulk=bulk,
+            outdir=str(outdir),
+            overwrite=OVERWRITE,
+            log_level=LOG_LEVEL,
+            calculator=CALCULATOR,
+            adsorbates=OER_ADSORBATES,
+            vasp_yaml_path=VASP_YAML_PATH,
+            solvent_correction_yaml_path=SOLVENT_CORRECTION_YAML_PATH,
+        )
+
+        print(f"------- metal = {metal} -------")
+        print(f"OER overpotential: {result['eta']:.3f} [V]")
+        print(f"Limiting potential: {result['U_L']:.3f} [V]")
+        print("Reaction Free Energy Change at U = 0 [V]:", [f"{x:.3f}" for x in result["diffG_U0"]])
+        print("Reaction Free Energy Change at U = 1.23 [V]:", [f"{x:.3f}" for x in result["diffG_eq"]])
+
+
+if __name__ == "__main__":
+    main()

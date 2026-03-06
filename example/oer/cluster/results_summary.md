@@ -1,3 +1,5 @@
+> Legacy note: this file is an archived ORR-oriented summary kept only as a reference artifact. Use `README.md`, `run_cluster.py`, and `plot_energy_diagram.py` in this directory for the current OER example.
+
 # ORR Overpotential Calculation for Nanoparticle Catalysts
 
 * This directory contains sample code for calculating the overpotential of Oxygen Reduction Reaction (ORR) on nanoparticle catalysts.

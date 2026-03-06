@@ -1,58 +1,23 @@
-# Cluster ORR calculation
+# OER cluster example
 
-* The example code: `run_cluster.py`.
+This example runs OER overpotential calculations on finite metal nanoparticles.
 
-## What it does
-* This script calculates the ORR (Oxygen Reduction Reaction) overpotential for a platinum cluster.
+## Entry points
 
-## How to run
-```bash
-python run_cluster.py
-```
+- `run_cluster.py`: minimal OER calculation for one octahedral Pt cluster.
+- `make_cluster.py`: generate reference images showing adsorption-site indexing.
+- `plot_energy_diagram.py`: scan `result/*/all_results.json` and build free-energy diagrams from completed runs.
 
-## What happens
-1. Creates a Pt octahedron cluster (3 layers)
-2. Tests different adsorbate positions for HO2, O, and OH
-3. Calculates energy changes for each reaction step
-4. Outputs the overpotential and limiting potential
+## What `run_cluster.py` does
 
-## Output
-* The script will print:
-  - ORR overpotential (V)
-  - Limiting potential (V)  
-  - Reaction free energy changes
+1. Build an octahedral Pt cluster with ASE.
+2. Define index-based adsorption sites for `HO2`, `O`, and `OH`.
+3. Run `calc_cluster_oer_overpotential`.
+4. Save outputs to `result/Pt/`.
 
-* Results are saved to the `result/Pt/` directory.
+## Outputs
 
-## Calculation conditions
-
-### Basic settings
-```python
-outdir = str(Path(__file__).parent / "result" / "Pt")    # Output directory
-overwrite = True                                         # Overwrite existing results
-log_level = "INFO"                                      # Log level (DEBUG/INFO/WARNING/ERROR)
-calculator = "mace"                                     # Calculator type
-yaml_path = str(Path(__file__).parent / "vasp.yaml")   # VASP settings file
-```
-
-### How to modify the cluster
-```python
-cluster = Octahedron(symbol="Pt", length=3, cutoff=0)
-```
-- `symbol`: Metal type ("Pt", "Au", "Pd", etc.)
-- `length`: Cluster size (number of layers)
-- `cutoff`: Remove atoms within cutoff distance
-
-### How to modify the adsorbate positions
-```python
-orr_adsorbates: Dict[str, List[Tuple]] = {
-    "HO2": [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-    "O":   [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-    "OH":  [(0,), (0, 1), (12,), (1, 12), (1, 2, 12)],
-}
-```
-* Numbers represent atom indices on the cluster surface where adsorbates will be placed.
-
-### VASP settings
-* If you are using and want to modify the VASP condition, edit `vasp.yaml` to modify DFT calculation parameters like energy cutoff, k-points, etc.
-  
+- `result/Pt/all_results.json`
+- `result/Pt/OER_summary.txt`
+- `result/Pt/OER_free_energy_diagram.png`
+- `result/oer_results_nanoparticles.csv` after running `plot_energy_diagram.py`
