@@ -15,7 +15,7 @@
 ### From GitHub Repository
 
 ```bash
-pip install git+https://github.com/ishikawa-group/orr_overpotential_calculator.git
+pip install git+https://github.com/ishikawa-group/orr-overpotential-calculator.git
 ```
 
 ### From Pre-built Wheel
