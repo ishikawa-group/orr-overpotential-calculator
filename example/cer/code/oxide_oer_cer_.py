@@ -141,14 +141,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="OER/CER on rutile MO2 high-coverage surfaces")
     parser.add_argument(
         "--calculator",
-        default="uma-oc20",
+        default="7net-omni_matpes_pbe",
         choices=[
-            "mace", "mace-d3", "mace-mh", "mace-mh-d3",
-            "mace-mh-oc20", "mace-mh-oc20-d3",
-            "uma-omat", "uma-oc20", "uma-oc22", "uma-oc25",
+            "mace-mh1_omat_pbe",
+            "uma-s-1p2_omat", "uma-s-1p2_oc20", "uma-s-1p2_oc22", "uma-s-1p2_oc25",
+            "7net-omni_matpes_pbe",
             "vasp",
         ],
-        help="Calculator to use",
+        help=(
+            "Calculator selector. Use vasp, mace-mh1_<head>, uma-s-1p2_<task>, "
+            "or 7net-omni_<modal>."
+        ),
     )
     parser.add_argument(
         "--data-dir",

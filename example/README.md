@@ -24,4 +24,4 @@ Use the scripts listed below as the maintained examples. Some `result/` files we
 - `cluster` examples use finite nanoparticles and index-based adsorption sites.
 - `modified_surface` examples compare a clean slab with a slab carrying an extra adsorbate or molecular modifier.
 - `vasp` directories only provide templates for external VASP execution.
-- ORR surface bulk workflows now default to fixed-cell bulk relaxation. Use `bulk_relax_mode="cell_and_positions"` and `bulk_cell_calculator="uma-omat"` when you explicitly want a cell-relaxed precursor.
+- ORR surface bulk workflows now default to fixed-cell bulk relaxation. Use `bulk_relax_mode="cell_and_positions"` and `bulk_cell_calculator="uma-s-1p2_omat"` when you explicitly want a cell-relaxed precursor.

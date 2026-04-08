@@ -36,7 +36,7 @@ def _finalize_steps(steps: int, max_opt_steps: Optional[int]) -> int:
 def run_relaxation(
     atoms,
     kind: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     calc_directory: str = "calc",
     fmax: float = 0.05,
@@ -78,7 +78,7 @@ def run_relaxation(
 def my_calculator(
     atoms,
     kind: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     calc_directory: str = "calc",
     fmax: float = 0.05,

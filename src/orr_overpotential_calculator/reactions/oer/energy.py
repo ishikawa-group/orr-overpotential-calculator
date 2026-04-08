@@ -61,7 +61,7 @@ def optimize_gas_molecule(
     molecule_name: str,
     gas_box_size: float,
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     fmax: float = 0.05,
     steps: int = 10,
@@ -73,7 +73,7 @@ def optimize_gas_molecule(
         molecule_name: Name of molecule from MOLECULES dictionary
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -104,7 +104,7 @@ def optimize_gas_molecule(
 def optimize_bulk_structure(
     bulk_atoms: Atoms,
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     fmax: float = 0.05,
     steps: int = 10,
@@ -115,7 +115,7 @@ def optimize_bulk_structure(
     Args:
         bulk_atoms: Initial bulk structure
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -141,7 +141,7 @@ def optimize_bulk_structure(
 def optimize_slab_structure(
     optimized_bulk: Atoms,
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     fmax: float = 0.05,
     steps: int = 10,
@@ -152,7 +152,7 @@ def optimize_slab_structure(
     Args:
         optimized_bulk: Optimized bulk structure
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -181,7 +181,7 @@ def optimize_cluster_structure(
     cluster: Atoms,
     gas_box_size: float,
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     fmax: float = 0.05,
     steps: int = 10,
@@ -193,7 +193,7 @@ def optimize_cluster_structure(
         cluster: Initial cluster structure
         gas_box_size: Size of cubic simulation box (Å)
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -221,7 +221,7 @@ def optimize_cluster_structure(
 def optimize_cluster_with_gas(
     cluster_gas: Atoms,
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None
     ) -> Tuple[Atoms, float]:
     """
@@ -230,7 +230,7 @@ def optimize_cluster_with_gas(
     Args:
         cluster_gas: cluster with gas molecules
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -264,7 +264,7 @@ def calculate_adsorption_on_site(
     optimized_molecule: Atoms,
     site: str,
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None
     ) -> Tuple[float, float]:
     """
@@ -275,7 +275,7 @@ def calculate_adsorption_on_site(
         optimized_molecule: Optimized gas molecule structure
         site: Adsorption site type ("ontop", "bridge", "fcc")
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -336,7 +336,7 @@ def calculate_adsorption_with_offset(
     optimized_molecule: Atoms,
     offset: Tuple[float, float],
     work_directory: str,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     fmax: float = 0.05,
     steps: int = 10,
@@ -349,7 +349,7 @@ def calculate_adsorption_with_offset(
         optimized_molecule: Optimized gas molecule structure
         offset: Fractional coordinate offset (x, y)
         work_directory: Directory for calculation files
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -403,7 +403,7 @@ def calculate_adsorption_with_indices(
     work_directory: str,
     height: float = None,
     orientation: list = None,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None,
     ) -> Tuple[float, float]:
     """
@@ -416,7 +416,7 @@ def calculate_adsorption_with_indices(
         work_directory: Directory for calculation files
         height: Adsorption height in Å (None uses default 2.0 Å)
         orientation: Molecule orientation vector (None for automatic)
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -479,7 +479,7 @@ def calculate_adsorption_with_indices(
 def calculate_all_molecules(
     optimized_slab: Atoms,
     slab_energy: float,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: Optional[str] = None
     ) -> Dict[str, Any]:
     """
@@ -488,7 +488,7 @@ def calculate_all_molecules(
     Args:
         optimized_slab: Optimized slab structure
         slab_energy: Energy of the clean slab (eV)
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         yaml_path: Path to VASP configuration file
         
     Returns:
@@ -583,7 +583,7 @@ def search_adsorption_site(
     base_dir: str = "result/adsorption_site",
     overwrite: bool = False,
     log_level: str = "INFO",
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     adsorbates: Dict[str, Atoms] = None,
     offset: Dict[str, List[Tuple[float, float]]] = None,
     yaml_path: str = None,
@@ -597,7 +597,7 @@ def search_adsorption_site(
         base_dir: Directory to save calculation results
         overwrite: Whether to overwrite existing calculation results
         log_level: Logging level
-        calculator: Calculation type ("vasp", "mace", etc.)
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         adsorbates: Dictionary of adsorbate molecules {name: Atoms}
         offset: Offset coordinates for adsorption sites {molecule_name: [(x1,y1), (x2,y2), ...]}
         yaml_path: Path to VASP configuration file
@@ -832,7 +832,7 @@ def attach_modifier_to_surface(
     modifier_molecule: Atoms,
     offset: Tuple[float, float],
     base_directory: Path,
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     yaml_path: str = None,
     overwrite: bool = False,
     ) -> Tuple[Atoms, float]:

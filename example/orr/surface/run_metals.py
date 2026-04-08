@@ -25,7 +25,7 @@ LATTICE_CONSTANTS = {
 
 OVERWRITE = True
 LOG_LEVEL = "INFO"
-CALCULATOR = "mace"
+CALCULATOR = "mace-mh1_omat_pbe"
 VASP_YAML_PATH = str(Path(__file__).parent / "vasp.yaml")
 SOLVENT_CORRECTION_YAML_PATH = str(Path(__file__).parent / "solvent_correction.yaml")
 RESULT_DIR = Path(__file__).parent / "result"

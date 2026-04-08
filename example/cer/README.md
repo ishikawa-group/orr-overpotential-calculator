@@ -18,7 +18,7 @@ This directory provides a minimal workflow to compare OER and CER overpotentials
 ## Example
 
 ```bash
-python example/cer/code/oxide_oer_cer_.py --calculator uma-oc20
+python example/cer/code/oxide_oer_cer_.py --calculator uma-s-1p2_oc20
 ```
 
-UMA calculators `uma-omat`, `uma-oc20`, `uma-oc22`, and `uma-oc25` use FAIRChem UMA-S-1p2.
+UMA calculators are selected as `uma-s-1p2_<task>` where task is one of `omat`, `oc20`, `oc22`, or `oc25`.

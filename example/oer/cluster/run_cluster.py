@@ -11,7 +11,7 @@ from orr_overpotential_calculator.surface.oer import calc_cluster_oer_overpotent
 OUTDIR = str(Path(__file__).parent / "result" / "Pt")
 OVERWRITE = True
 LOG_LEVEL = "INFO"
-CALCULATOR = "mace"
+CALCULATOR = "mace-mh1_omat_pbe"
 VASP_YAML_PATH = str(Path(__file__).parent / "vasp.yaml")
 
 CLUSTER = Octahedron(symbol="Pt", length=3, cutoff=0)

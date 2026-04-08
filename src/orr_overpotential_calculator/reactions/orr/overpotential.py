@@ -91,7 +91,7 @@ def calculate_required_molecules(
         slab_energy: float,
         outdir: Path,
         overwrite: bool = False,
-        calculator: str = "mace",
+        calculator: str = "7net-omni_matpes_pbe",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         bulk_energy: float = None,
@@ -104,7 +104,7 @@ def calculate_required_molecules(
         slab_energy: Energy of the optimized slab
         outdir: Base directory for calculations
         overwrite: Force recalculation of existing results
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         adsorbates: Dictionary of adsorbate positions (default uses ADSORBATES)
         vasp_yaml_path: Path to VASP configuration file
         bulk_energy: Energy of the bulk structure optimization
@@ -204,7 +204,7 @@ def calculate_required_molecules_with_indices(
         slab_energy: float,
         outdir: Path,
         overwrite: bool = False,
-        calculator: str = "mace",
+        calculator: str = "7net-omni_matpes_pbe",
         indices_dict: Dict[str, List] = None,
         vasp_yaml_path: str = None,
         height: float = None,
@@ -606,7 +606,7 @@ def calc_orr_overpotential(
         outdir: str = "result",
         overwrite: bool = False,
         log_level: str = "INFO",
-        calculator: str = "mace",
+        calculator: str = "7net-omni_matpes_pbe",
         adsorbates: Dict[str, List[Tuple[float, float]]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
@@ -624,7 +624,7 @@ def calc_orr_overpotential(
         outdir: Output directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         adsorbates: Dictionary of adsorption sites
         vasp_yaml_path: Path to VASP configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
@@ -793,7 +793,7 @@ def calc_cluster_orr_overpotential(
         outdir: str = "result/matter_sim",
         overwrite: bool = False,
         log_level: str = "INFO",
-        calculator: str = "mace",
+        calculator: str = "7net-omni_matpes_pbe",
         adsorbates: Dict[str, List[Tuple]] = None,
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
@@ -808,7 +808,7 @@ def calc_cluster_orr_overpotential(
         outdir: Base directory for calculations
         overwrite: Force recalculation of existing results
         log_level: Logging level
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         adsorbates: Dictionary of atomic indices for adsorption sites
         vasp_yaml_path: Path to configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
@@ -897,7 +897,7 @@ def calc_orr_overpotential_modified(
     base_dir: Optional[str] = None,
     overwrite: bool = False,
     log_level: str = "INFO",
-    calculator: str = "mace",
+    calculator: str = "7net-omni_matpes_pbe",
     orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
     modify_adsorbates: Dict[str, Atoms] = None,
     modify_offset: Dict[str, List[Tuple[float, float]]] = None,
@@ -914,7 +914,7 @@ def calc_orr_overpotential_modified(
         base_dir: Deprecated alias for outdir (if provided, it overrides outdir)
         overwrite: Force recalculation of existing results
         log_level: Logging level
-        calculator: Calculator type ("vasp", "mace")
+        calculator: Calculator selector string (for example: "mace-mh1_omat_pbe", "uma-s-1p2_oc20", "7net-omni_matpes_pbe", "vasp", "qe")
         orr_adsorbates: Adsorption sites for ORR-related species
         modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
         modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}

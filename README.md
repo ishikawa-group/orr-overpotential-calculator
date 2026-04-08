@@ -31,7 +31,7 @@ slab = fcc111("Pt", size=(2, 2, 4), vacuum=12.0)
 result = calc_orr_overpotential(
     surface=slab,
     opt_bulk=False,
-    calculator="mace",
+    calculator="mace-mh1_omat_pbe",
     outdir="result/Pt111",
 )
 
@@ -43,11 +43,23 @@ If you start from a periodic precursor with `bulk=...`, the default bulk stage i
 ```python
 result = calc_orr_overpotential(
     bulk=bulk,
-    calculator="uma-oc20",
+    calculator="uma-s-1p2_oc20",
     bulk_relax_mode="cell_and_positions",
-    bulk_cell_calculator="uma-omat",
+    bulk_cell_calculator="uma-s-1p2_omat",
 )
 ```
+
+
+## Calculator strings
+
+Accepted backend names are calculator strings:
+
+- DFT: `vasp`, `qe`
+- MACE-MH1: `mace-mh1_<head>` (example: `mace-mh1_omat_pbe`, optional `+d3`, optional `+cueq=<auto|true|false>`)
+- UMA-S-1p2: `uma-s-1p2_<task>` where task is `omat`, `oc20`, `oc22`, or `oc25`
+- SevenNet Omni: `7net-omni_<modal>` (example: `7net-omni_matpes_pbe`, optional `+cueq=<auto|true|false>`)
+
+Legacy aliases (`mace`, `mace-mh`, `mace-mh-d3`, `mace-mh-oc20`, `mace-mh-oc20-d3`, `mace-d3`) and `orb-v3` are removed and now raise explicit errors.
 
 ## Main outputs
 

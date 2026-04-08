@@ -22,7 +22,7 @@ from orr_overpotential_calculator.reactions.orr.overpotential import calc_orr_ov
 def _fake_bulk_optimize(
     atoms,
     work_directory,
-    calculator="mace",
+    calculator="mace-mh1_omat_pbe",
     optimizer="LBFGSLineSearch",
     max_opt_steps=300,
     yaml_path=None,
@@ -45,7 +45,7 @@ def _fake_bulk_optimize(
 def _fake_slab_optimize(
     atoms,
     work_directory,
-    calculator="mace",
+    calculator="mace-mh1_omat_pbe",
     optimizer="LBFGSLineSearch",
     max_opt_steps=300,
     yaml_path=None,
@@ -59,8 +59,8 @@ class OrrBulkRelaxModeTest(unittest.TestCase):
         self.bulk = fcc111("Pt", size=(2, 2, 2), a=3.92, vacuum=None, periodic=True)
 
     def test_supports_stress_for_uma_variants(self):
-        self.assertTrue(supports_stress("uma-omat"))
-        self.assertFalse(supports_stress("uma-oc20"))
+        self.assertTrue(supports_stress("uma-s-1p2_omat"))
+        self.assertFalse(supports_stress("uma-s-1p2_oc20"))
 
     def test_default_bulk_relax_mode_is_positions_only(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -94,7 +94,7 @@ class OrrBulkRelaxModeTest(unittest.TestCase):
                     },
                 ),
             ):
-                result = calc_orr_overpotential(bulk=self.bulk, outdir=tmpdir, calculator="uma-oc20")
+                result = calc_orr_overpotential(bulk=self.bulk, outdir=tmpdir, calculator="uma-s-1p2_oc20")
 
             self.assertEqual(len(bulk_mock.call_args_list), 1)
             self.assertFalse(bulk_mock.call_args_list[0].kwargs["relax_cell"])
@@ -110,7 +110,7 @@ class OrrBulkRelaxModeTest(unittest.TestCase):
                 calc_orr_overpotential(
                     bulk=self.bulk,
                     outdir=tmpdir,
-                    bulk_cell_calculator="uma-omat",
+                    bulk_cell_calculator="uma-s-1p2_omat",
                 )
 
     def test_cell_and_positions_uses_separate_calculators(self):
@@ -152,21 +152,21 @@ class OrrBulkRelaxModeTest(unittest.TestCase):
                 result = calc_orr_overpotential(
                     bulk=self.bulk,
                     outdir=tmpdir,
-                    calculator="uma-oc20",
+                    calculator="uma-s-1p2_oc20",
                     bulk_relax_mode="cell_and_positions",
-                    bulk_cell_calculator="uma-omat",
+                    bulk_cell_calculator="uma-s-1p2_omat",
                 )
 
             self.assertEqual(len(bulk_mock.call_args_list), 2)
-            self.assertEqual(bulk_mock.call_args_list[0].kwargs["calculator"], "uma-omat")
+            self.assertEqual(bulk_mock.call_args_list[0].kwargs["calculator"], "uma-s-1p2_omat")
             self.assertTrue(bulk_mock.call_args_list[0].kwargs["relax_cell"])
-            self.assertEqual(bulk_mock.call_args_list[1].kwargs["calculator"], "uma-oc20")
+            self.assertEqual(bulk_mock.call_args_list[1].kwargs["calculator"], "uma-s-1p2_oc20")
             self.assertFalse(bulk_mock.call_args_list[1].kwargs["relax_cell"])
-            self.assertEqual(result["bulk_relaxation"]["cell_calculator"], "uma-omat")
+            self.assertEqual(result["bulk_relaxation"]["cell_calculator"], "uma-s-1p2_omat")
 
             payload = json.loads((Path(tmpdir) / "bulk" / "bulk_relaxation.json").read_text())
-            self.assertEqual(payload["cell_calculator"], "uma-omat")
-            self.assertEqual(payload["position_calculator"], "uma-oc20")
+            self.assertEqual(payload["cell_calculator"], "uma-s-1p2_omat")
+            self.assertEqual(payload["position_calculator"], "uma-s-1p2_oc20")
 
     def test_cell_and_positions_requires_stress_support(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -178,9 +178,9 @@ class OrrBulkRelaxModeTest(unittest.TestCase):
                     calc_orr_overpotential(
                         bulk=self.bulk,
                         outdir=tmpdir,
-                        calculator="uma-oc20",
+                        calculator="uma-s-1p2_oc20",
                         bulk_relax_mode="cell_and_positions",
-                        bulk_cell_calculator="uma-oc20",
+                        bulk_cell_calculator="uma-s-1p2_oc20",
                     )
 
 

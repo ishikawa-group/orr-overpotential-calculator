@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "orr-overpotential-calculator"
 version = "0.2.0"
 description = "Calculator for ORR overpotential"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "matplotlib",
     "pandas",
@@ -17,7 +17,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fairchem = ["fairchem-core>=2.16.0"]
+fairchem = ["fairchem-core>=2.19.0"]
+sevenn = ["sevenn"]
+cueq12 = [
+    "cuequivariance>=0.6.0; python_version >= '3.10'",
+    "cuequivariance-torch>=0.6.0; python_version >= '3.10'",
+    "cuequivariance-ops-torch-cu12; python_version >= '3.10'"
+]
+cueq13 = [
+    "cuequivariance>=0.7.0; python_version >= '3.10'",
+    "cuequivariance-torch>=0.7.0; python_version >= '3.10'",
+    "cuequivariance-ops-torch-cu13; python_version >= '3.10'"
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
