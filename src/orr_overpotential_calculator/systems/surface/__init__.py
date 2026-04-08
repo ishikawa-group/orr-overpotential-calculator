@@ -1,1 +1,1 @@
-"""Surface workflow exports."""
+"""Surface-specific system internals (no public API exports)."""

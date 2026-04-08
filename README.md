@@ -18,6 +18,8 @@ pip install .[fairchem]
 - `orr_overpotential_calculator.surface.cer`
 - `orr_overpotential_calculator.nanoparticle.orr`
 
+`orr_overpotential_calculator.systems.surface.api` is no longer provided; use the surface entry points above.
+
 ## Minimal ORR example
 
 ```python

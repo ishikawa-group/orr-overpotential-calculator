@@ -60,6 +60,24 @@ class PublicApiLayoutTest(unittest.TestCase):
         with self.assertRaises(ModuleNotFoundError):
             importlib.import_module("nanoparticle.orr_overpotential_calculator")
 
+    def test_system_surface_api_alias_removed(self):
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("orr_overpotential_calculator.systems.surface.api")
+
+    def test_cer_modified_entrypoint_renamed(self):
+        from orr_overpotential_calculator.reactions.cer import overpotential as cer_api
+
+        self.assertTrue(hasattr(cer_api, "calc_cer_overpotential_modified"))
+        with self.assertRaises(NotImplementedError):
+            cer_api.calc_cer_overpotential_modified(bulk=None)
+
+    def test_cer_oer_named_alias_deprecated(self):
+        from orr_overpotential_calculator.reactions.cer import overpotential as cer_api
+
+        with self.assertWarns(DeprecationWarning):
+            with self.assertRaises(NotImplementedError):
+                cer_api.calc_oer_overpotential_modified(bulk=None)
+
     def test_root_convenience_import_removed(self):
         with self.assertRaises(ImportError):
             exec("from orr_overpotential_calculator import calc_orr_overpotential", {})

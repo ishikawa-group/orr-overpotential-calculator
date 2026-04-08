@@ -19,6 +19,7 @@ import logging
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 
@@ -806,6 +807,30 @@ def calc_cluster_cer_overpotential(
     return cer_results
 
 
+def calc_cer_overpotential_modified(
+    bulk: Atoms,
+    outdir: str = "result/modified_surface",
+    base_dir: Optional[str] = None,
+    overwrite: bool = False,
+    log_level: str = "INFO",
+    calculator: str = "mace",
+    orr_adsorbates: Dict[str, List[Tuple[float, float]]] = None,
+    modify_adsorbates: Dict[str, Atoms] = None,
+    modify_offset: Dict[str, List[Tuple[float, float]]] = None,
+    vasp_yaml_path: str = None,
+    solvent_correction_yaml_path: str = None,
+) -> Dict[str, Any]:
+    """
+    Placeholder for CER on modified surfaces.
+
+    This workflow is currently not implemented in the CER module.
+    The function exists to provide a correctly named CER-facing API.
+    """
+    raise NotImplementedError(
+        "Modified-surface CER workflow is not implemented yet."
+    )
+
+
 def calc_oer_overpotential_modified(
     bulk: Atoms,
     outdir: str = "result/modified_surface",
@@ -820,136 +845,27 @@ def calc_oer_overpotential_modified(
     solvent_correction_yaml_path: str = None,
 ) -> Dict[str, Any]:
     """
-    Calculate OER overpotential on surface modified with adsorbates.
+    Deprecated alias kept for backward compatibility.
 
     Args:
-        bulk: Bulk crystal structure
-        outdir: Base directory for calculation results
-        base_dir: Deprecated alias for outdir (if provided, it overrides outdir)
-        overwrite: Force recalculation of existing results
-        log_level: Logging level
-        calculator: Calculator type ("vasp", "mace")
-        orr_adsorbates: Adsorption sites for OER-related species
-        modify_adsorbates: Dictionary of modifier molecules {name: Atoms}
-        modify_offset: Adsorption sites for modifier molecules {molecule_name: [(x,y)]}
-        vasp_yaml_path: Path to VASP configuration file
-        solvent_correction_yaml_path: Path to solvent correction YAML file
-
-    Returns:
-        Dictionary containing overpotential and thermodynamic data
+        Same as calc_cer_overpotential_modified.
     """
-    raise NotImplementedError(
-        "This module is cer_overpotential_calculator (CER). "
-        "The OER modified-surface workflow is not supported here."
+    warnings.warn(
+        "calc_oer_overpotential_modified in reactions.cer.overpotential is deprecated; "
+        "use calc_cer_overpotential_modified instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
-
-    logger = logging.getLogger("oer_modified_surface")
-
-    # Logging configuration
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format="%(levelname)s: %(message)s",
-        stream=sys.stdout,
-    )
-
-    # Set default values
-    if orr_adsorbates is None:
-        orr_adsorbates = ADSORBATES
-
-    # Check modifier molecules and positions
-    if modify_adsorbates is None or modify_offset is None:
-        raise ValueError("Surface modifier molecules (modify_adsorbates) and adsorption positions (modify_offset) are required")
-
-    # Directory setup (prefer outdir; allow legacy base_dir)
-    if base_dir and base_dir != outdir:
-        logger.warning("base_dir is deprecated; using base_dir value. Please switch to outdir.")
-        outdir = base_dir
-
-    outdir_path = Path(outdir).resolve()
-    outdir_path.mkdir(parents=True, exist_ok=True)
-
-    # --- 1. Bulk optimization ---
-    logger.info("Optimizing bulk structure...")
-    bulk_dir = outdir_path / "bulk"
-    bulk_dir.mkdir(parents=True, exist_ok=True)
-
-    optimized_bulk, bulk_energy = optimize_bulk_structure(
-        bulk, str(bulk_dir), calculator, vasp_yaml_path
-    )
-    write(str(bulk_dir / "optimized_bulk.extxyz"), optimized_bulk)
-
-    # --- 2. Clean slab optimization ---
-    logger.info("Optimizing clean slab structure...")
-    slab_dir = outdir_path / "slab"
-    slab_dir.mkdir(parents=True, exist_ok=True)
-
-    optimized_slab, slab_energy = optimize_slab_structure(
-        optimized_bulk, str(slab_dir), calculator, vasp_yaml_path
-    )
-    write(str(slab_dir / "optimized_slab.extxyz"), optimized_slab)
-
-    # --- 3. Modifier molecule optimization and adsorption ---
-    # Use the first modifier molecule
-    modifier_name = list(modify_adsorbates.keys())[0]
-    modifier_molecule = modify_adsorbates[modifier_name]
-    modifier_offset = modify_offset[modifier_name][0]  # Use single position
-
-    logger.info(f"Attaching surface modifier {modifier_name} at position {modifier_offset}...")
-
-    modified_slab, modified_slab_energy = attach_modifier_to_surface(
-        optimized_slab,
-        slab_energy,
-        modifier_name,
-        modifier_molecule,
-        modifier_offset,
-        outdir_path,
+    return calc_cer_overpotential_modified(
+        bulk=bulk,
+        outdir=outdir,
+        base_dir=base_dir,
         overwrite=overwrite,
+        log_level=log_level,
         calculator=calculator,
-        vasp_yaml_path=vasp_yaml_path
+        orr_adsorbates=orr_adsorbates,
+        modify_adsorbates=modify_adsorbates,
+        modify_offset=modify_offset,
+        vasp_yaml_path=vasp_yaml_path,
+        solvent_correction_yaml_path=solvent_correction_yaml_path,
     )
-
-    # Save modified slab
-    modified_slab_path = outdir_path / f"modified_slab_{modifier_name}.extxyz"
-    modified_slab.write(str(modified_slab_path))
-    logger.info(f"Saved modified slab structure: {modified_slab_path}")
-
-    # --- 4. OER-related molecule adsorption calculations (on modified surface) ---
-    logger.info("Running OER-related molecule calculations on modified surface...")
-    result_dir = outdir_path / "oer_on_modified_surface"
-    result_dir.mkdir(parents=True, exist_ok=True)
-
-    # Perform OER molecule adsorption calculations on modified slab
-    results = calculate_required_molecules(
-        modified_slab,                # Modified slab
-        modified_slab_energy,         # Modified slab energy
-        result_dir,
-        overwrite=overwrite,
-        calculator=calculator,
-        adsorbates=orr_adsorbates,
-        vasp_yaml_path=vasp_yaml_path
-    )
-
-    # --- 5. Reaction energy and overpotential calculation ---
-    reaction_energies, energies = compute_reaction_energies(results, modified_slab_energy, solvent_correction_yaml_path)
-    orr_results = get_overpotential_oer(
-        reaction_energies, result_dir, verbose=True, save_plot=True
-    )
-    overpotential = orr_results["eta"]
-
-    # --- 6. Summary generation ---
-    with (outdir_path / "OER_summary_modified_surface.txt").open("w") as f:
-        f.write(f"--- OER Summary (Surface modifier: {modifier_name}) ---\n\n")
-        f.write(json.dumps(convert_numpy_types(energies), indent=2))
-        f.write("\n\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
-        f.write(f"Overpotential η = {overpotential:.3f} V\n")
-
-    logger.info(f"Saved summary: {outdir_path / 'OER_summary_modified_surface.txt'}")
-
-    # Return results including modifier information
-    orr_results.update({
-        "modifier": modifier_name,
-        "modifier_offset": modifier_offset,
-        "E_bulk": float(bulk_energy),  # Add bulk energy for consistency
-    })
-
-    return orr_results
