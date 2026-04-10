@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import os
 import re
@@ -36,6 +37,12 @@ UMA_TASK_STRESS_SUPPORT = {
 }
 MACE_MH1_MODEL_URL = "https://github.com/ACEsuit/mace-foundations/releases/download/mace_mh_1/mace-mh-1.model"
 CUEQ_OPTIONS = {"auto", "true", "false"}
+CUEQ_REQUIRED_MODULES = ("cuequivariance", "cuequivariance_torch")
+CUEQ_OPS_MODULE_CANDIDATES = (
+    "cuequivariance_ops_torch",
+    "cuequivariance_ops_torch_cu12",
+    "cuequivariance_ops_torch_cu13",
+)
 
 
 @dataclass
@@ -527,6 +534,26 @@ def _resolve_cueq(spec: CalculatorSpec, *, default: bool) -> bool | None:
     return spec.cueq_mode == "true"
 
 
+def _cueq_runtime_available() -> bool:
+    try:
+        for module_name in CUEQ_REQUIRED_MODULES:
+            importlib.import_module(module_name)
+    except Exception:
+        return False
+
+    for module_name in CUEQ_OPS_MODULE_CANDIDATES:
+        try:
+            importlib.import_module(module_name)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _default_auto_cueq_enabled() -> bool:
+    return get_device().startswith("cuda") and _cueq_runtime_available()
+
+
 def _build_mace_mh1_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
     from mace.calculators import mace_mp
 
@@ -561,12 +588,13 @@ def _build_mace_mh1_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
 def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
     from sevenn.calculator import SevenNetCalculator
 
+    auto_cueq = _default_auto_cueq_enabled()
     atoms.calc = ProtectedCalculator(
         SevenNetCalculator(
             model="7net-omni",
             device=get_device(),
             modal=spec.selector,
-            enable_cueq=_resolve_cueq(spec, default=False),
+            enable_cueq=_resolve_cueq(spec, default=auto_cueq),
             enable_flash=False,
         )
     )
