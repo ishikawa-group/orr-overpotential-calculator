@@ -963,7 +963,7 @@ def create_orr_volcano_plot(
 
     # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
     entropy = {
-        "H2": 0.40 * T / 298.15, "H2O": 0.67 * T / 298.15,
+        "H2": 0.41 * T / 298.15, "H2O": 0.67 * T / 298.15,
         "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
     }
     # Calculate O2 entropy from H2O and H2
