@@ -290,6 +290,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     solvent_correction_yaml_path: str | None = None,
     vacuum_size: float = 8.0,
     random_seed: int = 0,
+    opt_fmax: float = 0.05,
 ) -> Dict[str, Any]:
     """
     Build ORR overpotential from clean + 1ML nanoparticle structures by subsampling coverage.
@@ -352,6 +353,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 optimizer=clean_optimizer_used,
                 max_opt_steps=max_opt_steps,
                 yaml_path=vasp_yaml_path,
+                fmax=float(opt_fmax),
             )
             if (not math.isfinite(float(clean_energy))) or (not _is_finite_atoms(clean_relaxed)):
                 raise ValueError("Non-finite clean optimization result")
@@ -366,6 +368,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 optimizer=clean_optimizer_used,
                 max_opt_steps=1000,
                 yaml_path=vasp_yaml_path,
+                fmax=float(opt_fmax),
             )
             if (not math.isfinite(float(clean_energy))) or (not _is_finite_atoms(clean_relaxed)):
                 raise ValueError("Non-finite clean optimization result after retry")
@@ -397,6 +400,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 optimizer=optimizer_used,
                 max_opt_steps=max_opt_steps,
                 yaml_path=vasp_yaml_path,
+                fmax=float(opt_fmax),
             )
             if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(opt)):
                 raise ValueError("Non-finite gas optimization result")
@@ -412,6 +416,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 optimizer=optimizer_used,
                 max_opt_steps=1000,
                 yaml_path=vasp_yaml_path,
+                fmax=float(opt_fmax),
             )
             if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(opt)):
                 raise ValueError("Non-finite gas optimization result after retry")
@@ -512,6 +517,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 optimizer=optimizer_used,
                 max_opt_steps=max_opt_steps,
                 yaml_path=vasp_yaml_path,
+                fmax=float(opt_fmax),
             )
             if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(relaxed)):
                 raise ValueError("Non-finite energy/positions")
@@ -528,6 +534,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                     optimizer=optimizer_used,
                     max_opt_steps=1000,
                     yaml_path=vasp_yaml_path,
+                    fmax=float(opt_fmax),
                 )
                 if (e is None) or (not math.isfinite(float(e))) or (not _is_finite_atoms(relaxed)):
                     raise ValueError("Non-finite energy/positions")
@@ -661,8 +668,8 @@ def calc_nanoparticle_orr_overpotential_from_target(
             cov_rows.append(row)
 
         if cov_to_eads:
-            # Choose maximum eV/site across successful coverages (as requested)
-            cov_star = max(cov_to_eads.items(), key=lambda kv: kv[1])[0]
+            # Choose minimum eV/site across successful coverages (as requested)
+            cov_star = min(cov_to_eads.items(), key=lambda kv: kv[1])[0]
             e_ads_star = float(cov_to_eads[cov_star])
             per_species[species] = {
                 "status": "ok",

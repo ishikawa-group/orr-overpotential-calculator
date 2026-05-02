@@ -84,7 +84,8 @@ def optimize_gas_molecule(
     calculator: str = "7net-omni_matpes_pbe",
     optimizer: str = "LBFGSLineSearch",
     max_opt_steps: int = 300,
-    yaml_path: Optional[str] = None
+    yaml_path: Optional[str] = None,
+    fmax: float = 0.05,
     ) -> Tuple[Atoms, float]:
     """
     Optimize gas phase molecule structure and calculate energy.
@@ -114,6 +115,7 @@ def optimize_gas_molecule(
         calculator=calculator,
         optimizer=optimizer,
         max_opt_steps=max_opt_steps,
+        fmax=float(fmax),
         yaml_path=yaml_path, 
         calc_directory=work_directory
     )
@@ -217,7 +219,8 @@ def optimize_cluster_structure(
     calculator: str = "7net-omni_matpes_pbe",
     optimizer: str = "LBFGSLineSearch",
     max_opt_steps: int = 300,
-    yaml_path: Optional[str] = None
+    yaml_path: Optional[str] = None,
+    fmax: float = 0.05,
     ) -> Tuple[Atoms, float]:
     """
     Optimize cluster structure and calculate energy.
@@ -244,6 +247,7 @@ def optimize_cluster_structure(
         calculator=calculator,
         optimizer=optimizer,
         max_opt_steps=max_opt_steps,
+        fmax=float(fmax),
         yaml_path=yaml_path,
         calc_directory=work_directory
     )
