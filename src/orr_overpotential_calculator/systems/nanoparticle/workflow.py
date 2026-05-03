@@ -15,7 +15,13 @@ from ase.io import write as ase_write
 
 from ...common.serialization import convert_numpy_types
 from ...reactions.orr.energy import optimize_gas_molecule, optimize_cluster_structure
-from ...reactions.orr.overpotential import compute_reaction_energies, get_overpotential_orr
+from ...reactions.orr.overpotential import (
+    _build_orr_results_from_delta_g_u0,
+    assemble_orr_step_free_energies_from_descriptors,
+    compute_adsorption_free_energy_descriptor_terms,
+    compute_reaction_energies,
+    get_overpotential_orr,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -302,8 +308,9 @@ def calc_nanoparticle_orr_overpotential_from_target(
            - Generate `n_samples` structures by randomly deleting adsorbates from 1ML.
            - Relax each structure and pick the lowest-energy sample as representative.
            - Compute E_ads(cov) = (E_NP_cov - (E_clean + n_ads * E_gas)) / n_ads  [eV/site].
-      4) For each species, choose E_ads = max over coverages (as requested).
-      5) Convert to effective E_slab_X = E_clean + E_gas(X) + E_ads_X and reuse existing ORR workflow.
+      4) For each species, choose the minimum E_ads over coverages.
+      5) Build ΔG_O, ΔG_OH, ΔG_OOH explicitly from E_ads + ZPE - TS, then assemble
+         the forward ORR step free energies and the free-energy diagram.
     """
 
     if n_samples < 1:
@@ -688,13 +695,20 @@ def calc_nanoparticle_orr_overpotential_from_target(
             }
 
     # ------------------------------------------------------------------
-    # 4) Build "effective" energies and reuse ORR pathway routines
+    # 4) Build legacy effective energies, explicit adsorption descriptors,
+    #    and compare the two equivalent ORR assembly routes.
     # ------------------------------------------------------------------
     effective: Dict[str, Any] = {
         "H2": {"E_gas": float(E_H2)},
         "H2O": {"E_gas": float(E_H2O)},
         "O2": {"E_gas": float(E_O2)},
     }
+    chosen_delta_g_ads_eV_per_site: Dict[str, float] = {}
+    delta_g_descriptors: Dict[str, float] = {}
+    delta_g_terms: Dict[str, Any] = {}
+    delta_g_steps_u0_eV: List[float] = [float("nan")] * 4
+    orr_results_legacy: Dict[str, Any] = {"eta": float("nan"), "U_L": float("nan"), "status": "failed"}
+    equivalence_check: Dict[str, Any] = {"status": "skipped"}
     can_compute = all(str(per_species[s].get("status")) == "ok" for s in ("O", "OH", "HO2"))
     if can_compute:
         effective.update(
@@ -723,7 +737,76 @@ def calc_nanoparticle_orr_overpotential_from_target(
             solvent_correction_yaml_path,
             default_solvent_corrections=(0.0, 0.0, 0.0),
         )
-        orr_results = get_overpotential_orr(reaction_energies, out_path, verbose=True, save_plot=True)
+        orr_results_legacy = get_overpotential_orr(
+            reaction_energies,
+            out_path,
+            verbose=False,
+            save_plot=False,
+        )
+
+        terms_o = compute_adsorption_free_energy_descriptor_terms(
+            per_species["O"]["chosen_E_ads_eV_per_site"], "O"
+        )
+        terms_oh = compute_adsorption_free_energy_descriptor_terms(
+            per_species["OH"]["chosen_E_ads_eV_per_site"], "OH"
+        )
+        terms_ooh = compute_adsorption_free_energy_descriptor_terms(
+            per_species["HO2"]["chosen_E_ads_eV_per_site"], "OOH"
+        )
+        delta_g_terms = {"O": terms_o, "OH": terms_oh, "OOH": terms_ooh}
+        chosen_delta_g_ads_eV_per_site = {
+            "O": float(terms_o["DeltaG_ads_eV_per_site"]),
+            "OH": float(terms_oh["DeltaG_ads_eV_per_site"]),
+            "OOH": float(terms_ooh["DeltaG_ads_eV_per_site"]),
+        }
+        delta_g_descriptors = {
+            "DeltaG_O": float(chosen_delta_g_ads_eV_per_site["O"]),
+            "DeltaG_OH": float(chosen_delta_g_ads_eV_per_site["OH"]),
+            "DeltaG_OOH": float(chosen_delta_g_ads_eV_per_site["OOH"]),
+        }
+        delta_g_steps_u0_eV = assemble_orr_step_free_energies_from_descriptors(
+            delta_g_descriptors["DeltaG_O"],
+            delta_g_descriptors["DeltaG_OH"],
+            delta_g_descriptors["DeltaG_OOH"],
+        )
+        orr_results = _build_orr_results_from_delta_g_u0(
+            delta_g_steps_u0_eV,
+            out_path,
+            verbose=True,
+            save_plot=True,
+        )
+
+        keys_to_compare = (
+            "diffG_U0",
+            "G_profile_U0",
+            "G_profile_UL",
+            "G_profile_Ueq",
+            "U_L",
+            "eta",
+        )
+        max_abs_diff = 0.0
+        per_key_diffs: Dict[str, float] = {}
+        for key in keys_to_compare:
+            lhs = np.asarray(orr_results_legacy[key], dtype=float)
+            rhs = np.asarray(orr_results[key], dtype=float)
+            diff = float(np.max(np.abs(lhs - rhs))) if lhs.size or rhs.size else 0.0
+            per_key_diffs[key] = diff
+            max_abs_diff = max(max_abs_diff, diff)
+        equivalence_check = {
+            "status": "ok" if max_abs_diff <= 1.0e-10 else "mismatch",
+            "threshold": 1.0e-10,
+            "max_abs_diff": float(max_abs_diff),
+            "per_key_max_abs_diff": per_key_diffs,
+        }
+        orr_results.update(
+            {
+                "chosen_DeltaG_ads_eV_per_site": convert_numpy_types(chosen_delta_g_ads_eV_per_site),
+                "DeltaG_ads_terms": convert_numpy_types(delta_g_terms),
+                "delta_g_descriptors": convert_numpy_types(delta_g_descriptors),
+                "delta_g_steps_u0_eV": list(map(float, delta_g_steps_u0_eV)),
+                "descriptor_equivalence_check": convert_numpy_types(equivalence_check),
+            }
+        )
     else:
         reaction_energies = [float("nan")] * 4
         energies = {}
@@ -745,9 +828,15 @@ def calc_nanoparticle_orr_overpotential_from_target(
         "coverages_used": list(coverages_to_run),
         "E_clean_eV": float(clean_energy),
         "per_species": per_species,
+        "chosen_DeltaG_ads_eV_per_site": convert_numpy_types(chosen_delta_g_ads_eV_per_site),
+        "DeltaG_ads_terms": convert_numpy_types(delta_g_terms),
+        "delta_g_descriptors": convert_numpy_types(delta_g_descriptors),
+        "delta_g_steps_u0_eV": list(map(float, delta_g_steps_u0_eV)),
         "effective_inputs": effective,
         "reaction_energies_eV": list(map(float, reaction_energies)),
         "energies_used": energies,
+        "orr_results_reaction_energy_route": convert_numpy_types(orr_results_legacy),
+        "descriptor_equivalence_check": convert_numpy_types(equivalence_check),
         "orr_results": orr_results,
     }
 
@@ -759,7 +848,18 @@ def calc_nanoparticle_orr_overpotential_from_target(
         f.write(f"  O   : {per_species['O']['chosen_E_ads_eV_per_site']:+.6f} (cov={per_species['O']['chosen_coverage']})\n")
         f.write(f"  OH  : {per_species['OH']['chosen_E_ads_eV_per_site']:+.6f} (cov={per_species['OH']['chosen_coverage']})\n")
         f.write(f"  OOH : {per_species['HO2']['chosen_E_ads_eV_per_site']:+.6f} (cov={per_species['HO2']['chosen_coverage']})\n")
+        if can_compute:
+            f.write("\nAdsorption free-energy descriptors (eV/site):\n")
+            f.write(f"  ΔG_O   : {delta_g_descriptors['DeltaG_O']:+.6f}\n")
+            f.write(f"  ΔG_OH  : {delta_g_descriptors['DeltaG_OH']:+.6f}\n")
+            f.write(f"  ΔG_OOH : {delta_g_descriptors['DeltaG_OOH']:+.6f}\n")
+            f.write("\nForward ORR step free energies at U=0 V (eV): "
+                    + ", ".join(f"{e:+.3f}" for e in delta_g_steps_u0_eV) + "\n")
         f.write("\nΔE (eV): " + ", ".join(f"{e:+.3f}" for e in reaction_energies) + "\n")
+        f.write(
+            "Descriptor/legacy equivalence max abs diff = "
+            f"{equivalence_check.get('max_abs_diff', float('nan')):.3e}\n"
+        )
         f.write(f"Overpotential η = {orr_results['eta']:.3f} V\n")
 
     return summary

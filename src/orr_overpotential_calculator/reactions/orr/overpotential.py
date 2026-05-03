@@ -75,6 +75,212 @@ ADSORBATE_HEIGHT = 2.0
 # Logger setup
 logger = logging.getLogger("orr_workflow")
 
+# Thermodynamic constants used in ORR free-energy corrections.
+ORR_ZPE = {
+    "H2": 0.27,
+    "H2O": 0.56,
+    "Oads": 0.07,
+    "OHads": 0.30,
+    "OOHads": 0.37,
+}
+ORR_TS = {
+    "H2": 0.41,
+    "H2O": 0.67,
+    "Oads": 0.0,
+    "OHads": 0.0,
+    "OOHads": 0.0,
+}
+
+
+def _canonical_orr_species(species: str) -> str:
+    mapping = {
+        "O": "O",
+        "OH": "OH",
+        "OOH": "OOH",
+        "HO2": "OOH",
+    }
+    key = str(species).strip()
+    if key not in mapping:
+        raise ValueError(f"Unsupported ORR adsorbate species: {species!r}")
+    return mapping[key]
+
+
+def compute_adsorption_free_energy_descriptor_terms(
+        e_ads_eV_per_site: float,
+        species: str,
+        temperature: float = 298.15,
+    ) -> Dict[str, float]:
+    """
+    Build adsorption free-energy terms for a single adsorbate from E_ads/site.
+
+    The expressions are written explicitly instead of collapsing them into
+    shorthand constants so that the physical meaning of each contribution is
+    visible in the saved results:
+
+      ΔG_O   = E_ads(O)   + [(ZPE_O   + ZPE_H2   - ZPE_H2O)   - (TS_O   + TS_H2   - TS_H2O)]
+      ΔG_OH  = E_ads(OH)  + [(ZPE_OH  + 1/2ZPE_H2 - ZPE_H2O)  - (TS_OH  + 1/2TS_H2 - TS_H2O)]
+      ΔG_OOH = E_ads(OOH) + [(ZPE_OOH + 3/2ZPE_H2 - 2ZPE_H2O) - (TS_OOH + 3/2TS_H2 - 2TS_H2O)]
+    """
+    species_key = _canonical_orr_species(species)
+
+    zpe_h2 = float(ORR_ZPE["H2"])
+    zpe_h2o = float(ORR_ZPE["H2O"])
+    ts_h2 = float(ORR_TS["H2"])
+    ts_h2o = float(ORR_TS["H2O"])
+
+    if species_key == "O":
+        zpe_ads = float(ORR_ZPE["Oads"])
+        ts_ads = float(ORR_TS["Oads"])
+        zpe_reference = zpe_h2 - zpe_h2o
+        ts_reference = ts_h2 - ts_h2o
+    elif species_key == "OH":
+        zpe_ads = float(ORR_ZPE["OHads"])
+        ts_ads = float(ORR_TS["OHads"])
+        zpe_reference = 0.5 * zpe_h2 - zpe_h2o
+        ts_reference = 0.5 * ts_h2 - ts_h2o
+    else:
+        zpe_ads = float(ORR_ZPE["OOHads"])
+        ts_ads = float(ORR_TS["OOHads"])
+        zpe_reference = 1.5 * zpe_h2 - 2.0 * zpe_h2o
+        ts_reference = 1.5 * ts_h2 - 2.0 * ts_h2o
+
+    delta_zpe = zpe_ads + zpe_reference
+    delta_ts = ts_ads + ts_reference
+    delta_g_ads = float(e_ads_eV_per_site) + delta_zpe - delta_ts
+
+    return {
+        "temperature_K": float(temperature),
+        "E_ads_eV_per_site": float(e_ads_eV_per_site),
+        "ZPE_ads_eV": zpe_ads,
+        "ZPE_reference_eV": zpe_reference,
+        "TS_ads_eV": ts_ads,
+        "TS_reference_eV": ts_reference,
+        "delta_ZPE_eV": delta_zpe,
+        "delta_TS_eV": delta_ts,
+        "DeltaG_ads_eV_per_site": delta_g_ads,
+    }
+
+
+def assemble_orr_step_free_energies_from_descriptors(
+        delta_g_o_eV: float,
+        delta_g_oh_eV: float,
+        delta_g_ooh_eV: float,
+        equilibrium_potential: float = 1.23,
+    ) -> List[float]:
+    """
+    Assemble forward ORR step free energies from adsorbate descriptors.
+
+    The literature descriptor form often writes the fourth quantity as ΔG_OH.
+    For the forward ORR free-energy diagram used here, the last step corresponds
+    to OH* + 1/2 H2 -> * + H2O, so the step free energy is -ΔG_OH.
+    """
+    return [
+        float(delta_g_ooh_eV - 4.0 * equilibrium_potential),
+        float(delta_g_o_eV - delta_g_ooh_eV),
+        float(delta_g_oh_eV - delta_g_o_eV),
+        float(-delta_g_oh_eV),
+    ]
+
+
+def _build_orr_results_from_delta_g_u0(
+        delta_g_u0: List[float],
+        output_dir: Path,
+        equilibrium_potential: float = 1.23,
+        verbose: bool = False,
+        save_plot: bool = True,
+    ) -> Dict[str, Any]:
+    reaction_count = 4
+    assert len(delta_g_u0) == reaction_count, "delta_g_u0 must contain 4 elements"
+
+    delta_g_u0 = np.array(delta_g_u0, dtype=float)
+    g_profile_u0 = np.concatenate(([0.0], np.cumsum(delta_g_u0)))
+    diff_g_u0 = np.diff(g_profile_u0)
+
+    dg_orr_max = np.max(diff_g_u0)
+    limiting_potential = (-1) * dg_orr_max
+    overpotential = equilibrium_potential - limiting_potential
+
+    g_profile_ueq = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * equilibrium_potential
+    g_profile_ul = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * limiting_potential
+    diff_g_eq = np.diff(g_profile_ueq)
+    diff_g_ul = np.diff(g_profile_ul)
+
+    if save_plot:
+        import matplotlib.pyplot as plt
+
+        labels = [
+            "O$_2$ + 2H$_2$", "OOH* + 1.5H$_2$", "O* + H$_2$O + H$_2$",
+            "OH* + H$_2$O + 0.5H$_2$", "* + 2H$_2$O",
+        ]
+        steps = np.arange(reaction_count + 1)
+        g0_shift = g_profile_u0 - g_profile_u0[-1]
+        geq_shift = g_profile_ueq - g_profile_ueq[-1]
+        gul_shift = g_profile_ul - g_profile_ul[-1]
+
+        u0_color = 'black'
+        ueq_color = 'green'
+        ul_color = 'blue'
+        line_width = 0.3
+
+        plt.figure(figsize=(8, 7))
+        plt.hlines(g0_shift[0], steps[0] - line_width, steps[0] + line_width,
+                   color=u0_color, alpha=0.6, linewidth=2.5, label="U = 0 V")
+        for i in range(1, len(steps)):
+            plt.hlines(g0_shift[i], steps[i] - line_width, steps[i] + line_width,
+                       color=u0_color, alpha=0.6, linewidth=2.5)
+        for i in range(len(steps) - 1):
+            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
+                     [g0_shift[i], g0_shift[i + 1]],
+                     '--', color=u0_color, alpha=0.6, linewidth=1.0)
+        plt.plot(steps, g0_shift, 'o', color=u0_color, alpha=0.6, markersize=4, linestyle='none')
+
+        plt.hlines(gul_shift[0], steps[0] - line_width, steps[0] + line_width,
+                   color=ul_color, alpha=0.6, linewidth=2.5,
+                   label=f"U = U$_L$ = {limiting_potential:.2f} V")
+        for i in range(1, len(steps)):
+            plt.hlines(gul_shift[i], steps[i] - line_width, steps[i] + line_width,
+                       color=ul_color, alpha=0.6, linewidth=2.5)
+        for i in range(len(steps) - 1):
+            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
+                     [gul_shift[i], gul_shift[i + 1]],
+                     '--', color=ul_color, alpha=0.6, linewidth=1.0)
+        plt.plot(steps, gul_shift, 'o', color=ul_color, alpha=0.6, markersize=4, linestyle='none')
+
+        plt.hlines(geq_shift[0], steps[0] - line_width, steps[0] + line_width,
+                   color=ueq_color, alpha=0.6, linewidth=2.5, label="U = 1.23 V")
+        for i in range(1, len(steps)):
+            plt.hlines(geq_shift[i], steps[i] - line_width, steps[i] + line_width,
+                       color=ueq_color, alpha=0.6, linewidth=2.5)
+        for i in range(len(steps) - 1):
+            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
+                     [geq_shift[i], geq_shift[i + 1]],
+                     '--', color=ueq_color, alpha=0.6, linewidth=1.0)
+        plt.plot(steps, geq_shift, 'o', color=ueq_color, alpha=0.6, markersize=4, linestyle='none')
+
+        plt.xticks(steps, labels, rotation=45, ha='right')
+        plt.ylabel('Free Energy (eV)')
+        plt.xlabel('Reaction Coordinate')
+        plt.title('ORR Free Energy Diagram')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(output_dir / 'ORR_free_energy_diagram.png', dpi=300)
+        plt.close()
+
+    if verbose:
+        logger.info("ΔG (U=0) = %s", delta_g_u0)
+        logger.info("U_L = %.6f V, η = %.6f V", limiting_potential, overpotential)
+
+    return {
+        "eta": float(overpotential),
+        "diffG_U0": list(map(float, diff_g_u0)),
+        "diffG_eq": list(map(float, diff_g_eq)),
+        "U_L": float(limiting_potential),
+        "G_profile_U0": list(map(float, g_profile_u0)),
+        "G_profile_Ueq": list(map(float, g_profile_ueq)),
+        "G_profile_UL": list(map(float, g_profile_ul)),
+        "diffG_UL": list(map(float, diff_g_ul)),
+    }
+
 
 def _write_bulk_relaxation_metadata(path: Path, payload: Dict[str, Any]) -> None:
     """Persist bulk relaxation metadata for later inspection."""
@@ -417,184 +623,36 @@ def get_overpotential_orr(
     """
     reaction_count = 4  # 4-electron pathway
     assert len(reaction_energies) == reaction_count, "reaction_energies must contain 4 elements"
+    # Zero-point energy corrections (eV)
+    zpe = dict(ORR_ZPE)
+    zpe["O2"] = 2.0 * (zpe["H2O"] - zpe["H2"])
 
-    # Zero-point energy corrections (eV)-- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
-    zpe = {
-        "H2": 0.27, "H2O": 0.56,
-        "Oads": 0.07, "OHads": 0.30, "OOHads": 0.37,
-    }
-    # Calculate O2 ZPE from H2O and H2
-    zpe["O2"] = 2 * (zpe["H2O"] - zpe["H2"])
+    # Entropy terms T*S (eV)
+    ts = dict(ORR_TS)
+    ts["O2"] = 2.0 * (ts["H2O"] - ts["H2"])
 
-    # Entropy terms T*S (eV) -- Reference: https://doi.org/10.1021/acs.jpclett.4c02164, https://doi.org/10.1021/jp047349j, https://doi.org/10.1016/j.jelechem.2021.115178, https://doi.org/10.1016/j.chemphys.2005.05.038
-    entropy = {
-        "H2": 0.41 / temperature, "H2O": 0.67 / temperature,
-        "Oads": 0.0, "OHads": 0.0, "OOHads": 0.0,
-    }
-    # Calculate O2 entropy from H2O and H2
-    entropy["O2"] = 2 * (entropy["H2O"] - entropy["H2"])
-
-    # Calculate ZPE and entropy corrections for each reaction step
     delta_zpe = np.array([
-        zpe["OOHads"] - (zpe["O2"] + 0 + 0.5 * zpe["H2"]),              # O2(g) + * + ½H2 → OOH*
-        (zpe["Oads"] + zpe["H2O"]) - (zpe["OOHads"] + 0.5 * zpe["H2"]), # OOH* + ½H2 → O* + H2O
-        zpe["OHads"] - (zpe["Oads"] + 0.5 * zpe["H2"]),                 # O* + ½H2 → OH*
-        (0 + zpe["H2O"]) - (zpe["OHads"] + 0.5 * zpe["H2"]),           # OH* + ½H2 → * + H2O
-    ])
+        zpe["OOHads"] - (zpe["O2"] + 0.0 + 0.5 * zpe["H2"]),
+        (zpe["Oads"] + zpe["H2O"]) - (zpe["OOHads"] + 0.5 * zpe["H2"]),
+        zpe["OHads"] - (zpe["Oads"] + 0.5 * zpe["H2"]),
+        (0.0 + zpe["H2O"]) - (zpe["OHads"] + 0.5 * zpe["H2"]),
+    ], dtype=float)
 
-    delta_ts = temperature * np.array([
-        entropy["OOHads"] - (entropy["O2"] + 0 + 0.5 * entropy["H2"]),              # O2(g) + * + ½H2 → OOH*
-        (entropy["Oads"] + entropy["H2O"]) - (entropy["OOHads"] + 0.5 * entropy["H2"]), # OOH* + ½H2 → O* + H2O
-        entropy["OHads"] - (entropy["Oads"] + 0.5 * entropy["H2"]),                 # O* + ½H2 → OH*
-        (0 + entropy["H2O"]) - (entropy["OHads"] + 0.5 * entropy["H2"]),           # OH* + ½H2 → * + H2O
-    ])
+    delta_ts = np.array([
+        ts["OOHads"] - (ts["O2"] + 0.0 + 0.5 * ts["H2"]),
+        (ts["Oads"] + ts["H2O"]) - (ts["OOHads"] + 0.5 * ts["H2"]),
+        ts["OHads"] - (ts["Oads"] + 0.5 * ts["H2"]),
+        (0.0 + ts["H2O"]) - (ts["OHads"] + 0.5 * ts["H2"]),
+    ], dtype=float)
 
-    # Calculate free energies
-    reaction_energies = np.array(reaction_energies)
-    delta_g_u0 = reaction_energies + delta_zpe - delta_ts  # ΔG at U=0 V
-
-    # Free energy profiles
-    g_profile_u0 = np.concatenate(([0.0], np.cumsum(delta_g_u0)))
-    equilibrium_potential = 1.23  # V
-
-    # Calculate step-wise free energy changes
-    diff_g_u0 = np.diff(g_profile_u0)
-
-    # Find limiting potential and overpotential
-    dg_orr_max = np.max(diff_g_u0)
-    limiting_potential = (-1) * dg_orr_max
-    overpotential = equilibrium_potential - limiting_potential
-
-    # Calculate profiles for U=1.23V and U=limiting potential
-    g_profile_ueq = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * equilibrium_potential
-    g_profile_ul = g_profile_u0 - np.arange(reaction_count + 1) * (-1) * limiting_potential
-    diff_g_eq = np.diff(g_profile_ueq)
-    diff_g_ul = np.diff(g_profile_ul)
-
-    # Generate free-energy diagram plot
-    if save_plot:
-        import matplotlib.pyplot as plt
-
-        # Reaction step labels
-        labels = [
-            "O$_2$ + 2H$_2$", "OOH* + 1.5H$_2$", "O* + H$_2$O + H$_2$",
-            "OH* + H$_2$O + 0.5H$_2$", "* + 2H$_2$O",
-        ]
-
-        # Steps and relative profiles
-        steps = np.arange(reaction_count + 1)
-        g0_shift = g_profile_u0 - g_profile_u0[-1]
-        geq_shift = g_profile_ueq - g_profile_ueq[-1]
-        gul_shift = g_profile_ul - g_profile_ul[-1]
-
-        # Colors for different potential profiles
-        u0_color = 'black'  # U=0V is black
-        ueq_color = 'green'  # U=1.23V is green
-        ul_color = 'blue'  # U=UL is blue
-
-        # Horizontal line width
-        line_width = 0.3
-
-        # Create figure
-        plt.figure(figsize=(8, 7))
-
-        # ------ U=0V profile ------
-        # First point with label
-        plt.hlines(g0_shift[0], steps[0] - line_width, steps[0] + line_width,
-                   color=u0_color, alpha=0.6, linewidth=2.5, label="U = 0 V")
-
-        # Remaining points without label
-        for i in range(1, len(steps)):
-            plt.hlines(g0_shift[i], steps[i] - line_width, steps[i] + line_width,
-                       color=u0_color, alpha=0.6, linewidth=2.5)
-
-        # Connect points with dashed lines
-        for i in range(len(steps) - 1):
-            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
-                     [g0_shift[i], g0_shift[i + 1]],
-                     '--', color=u0_color, alpha=0.6, linewidth=1.0)
-
-        # Add markers
-        plt.plot(steps, g0_shift, 'o', color=u0_color, alpha=0.6,
-                 markersize=4, linestyle='none')
-
-        # ------ U=UL (Limiting Potential) profile ------
-        # First point with label
-        plt.hlines(gul_shift[0], steps[0] - line_width, steps[0] + line_width,
-                   color=ul_color, linewidth=2.5,
-                   label=f"U$_{{L}}$ = {limiting_potential:.2f} V")
-
-        # Remaining points without label
-        for i in range(1, len(steps)):
-            plt.hlines(gul_shift[i], steps[i] - line_width, steps[i] + line_width,
-                       color=ul_color, linewidth=2.5)
-
-        # Connect points with dashed lines
-        for i in range(len(steps) - 1):
-            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
-                     [gul_shift[i], gul_shift[i + 1]],
-                     '--', color=ul_color, linewidth=1.0)
-
-        # Add markers
-        plt.plot(steps, gul_shift, 's', color=ul_color, markersize=5, linestyle='none')
-
-        # ------ U=Equilibrium (1.23V) profile ------
-        # First point with label
-        plt.hlines(geq_shift[0], steps[0] - line_width, steps[0] + line_width,
-                   color=ueq_color, alpha=0.8, linewidth=2.5,
-                   label=f"U = {equilibrium_potential} V")
-
-        # Remaining points without label
-        for i in range(1, len(steps)):
-            plt.hlines(geq_shift[i], steps[i] - line_width, steps[i] + line_width,
-                       color=ueq_color, alpha=0.8, linewidth=2.5)
-
-        # Connect points with dashed lines
-        for i in range(len(steps) - 1):
-            plt.plot([steps[i] + line_width, steps[i + 1] - line_width],
-                     [geq_shift[i], geq_shift[i + 1]],
-                     '--', color=ueq_color, alpha=0.8, linewidth=1.0)
-
-        # Add markers
-        plt.plot(steps, geq_shift, 'o', color=ueq_color, alpha=0.8,
-                 markersize=6, linestyle='none')
-
-        # Formatting
-        plt.xticks(steps, labels, rotation=15, ha='right')
-        plt.ylabel("ΔG (eV)", fontsize=12, fontweight='bold')
-        plt.xlabel("Reaction Coordinate", fontsize=12, fontweight='bold')
-        plt.title("4e⁻ ORR Free-Energy Diagram", fontsize=14, fontweight='bold')
-        plt.grid(True, linestyle='--', alpha=0.3)
-
-        # Add legend and horizontal zero line
-        plt.legend(loc='upper right', fontsize=10)
-        plt.axhline(y=0, color='black', linestyle='-', alpha=0.5, linewidth=0.8)
-
-        plt.tight_layout()
-
-        # Save figure
-        figure_path = output_dir / "ORR_free_energy_diagram.png"
-        plt.savefig(figure_path, dpi=300, bbox_inches='tight')
-        plt.close()
-
-        logger.info("Saved diagram → %s", figure_path)
-    else:
-        logger.info("Plot generation skipped (save_plot=False)")
-
-    if verbose:
-        logger.info("ΔG (U=0) = %s", delta_g_u0)
-        logger.info("Limiting potential U_L = %.3f V", limiting_potential)
-        logger.info("Overpotential η = %.3f V", overpotential)
-
-    return {
-        "eta": overpotential,
-        "diffG_U0": diff_g_u0.tolist(),
-        "diffG_eq": diff_g_eq.tolist(),
-        "U_L": limiting_potential,
-        "G_profile_U0": g_profile_u0.tolist(),
-        "G_profile_Ueq": g_profile_ueq.tolist(),
-        "G_profile_UL": g_profile_ul.tolist()
-    }
+    delta_g_u0 = np.array(reaction_energies, dtype=float) + delta_zpe - delta_ts
+    return _build_orr_results_from_delta_g_u0(
+        delta_g_u0.tolist(),
+        output_dir,
+        equilibrium_potential=1.23,
+        verbose=verbose,
+        save_plot=save_plot,
+    )
 
 
 # ---------------------------------------------------------------------------
