@@ -597,12 +597,12 @@ def calc_nanoparticle_orr_overpotential_from_target(
         groups: List[Tuple[int, ...]],
         cov: float,
         gas_energy: float,
-    ) -> Tuple[float | None, int, float | None, List[Dict[str, Any]]]:
+    ) -> Tuple[float | None, float | None, int, float | None, List[Dict[str, Any]]]:
         n_1ml = len(groups)
         n_keep = _coverage_to_keep(n_1ml, cov)
         n_keep = max(0, min(int(n_keep), int(n_1ml)))
 
-        successful: List[CoverageSampleResult] = []
+        successful: List[Tuple[CoverageSampleResult, float, float]] = []
         sample_records: List[Dict[str, Any]] = []
         species_id = {"O": 1, "OH": 2, "HO2": 3}.get(species, 9)
         cov_id = int(round(float(cov) * 1000.0))
@@ -627,17 +627,25 @@ def calc_nanoparticle_orr_overpotential_from_target(
             )
             sample_records.append(record)
             if result is not None:
-                successful.append(result)
+                if result.n_ads <= 0:
+                    e_ads = 0.0
+                else:
+                    e_ads = (
+                        result.energy_eV - (clean_energy + float(result.n_ads) * float(gas_energy))
+                    ) / float(result.n_ads)
+                descriptor_species = "OOH" if species == "HO2" else species
+                dg_terms = compute_adsorption_free_energy_descriptor_terms(e_ads, descriptor_species)
+                record["E_ads_eV_per_site"] = float(e_ads)
+                record["DeltaG_ads_eV_per_site"] = float(dg_terms["DeltaG_ads_eV_per_site"])
+                # Selection is now performed on ΔGads/site. For a fixed species this differs
+                # from Eads/site only by a constant shift, so ranking is expected to remain unchanged.
+                successful.append((result, float(e_ads), float(dg_terms["DeltaG_ads_eV_per_site"])))
 
         if not successful:
-            return None, int(n_keep), None, sample_records
+            return None, None, int(n_keep), None, sample_records
 
-        best = min(successful, key=lambda s: s.energy_eV)
-        if best.n_ads <= 0:
-            e_ads = 0.0
-        else:
-            e_ads = (best.energy_eV - (clean_energy + float(best.n_ads) * float(gas_energy))) / float(best.n_ads)
-        return float(e_ads), int(n_keep), float(best.energy_eV), sample_records
+        best, e_ads_best, dg_ads_best = min(successful, key=lambda item: item[2])
+        return float(e_ads_best), float(dg_ads_best), int(n_keep), float(best.energy_eV), sample_records
 
     groups_O = _groups_from_1ml(clean_in, o_1ml_in, species="O")
     groups_OH = _groups_from_1ml(clean_in, oh_1ml_in, species="OH")
@@ -651,8 +659,9 @@ def calc_nanoparticle_orr_overpotential_from_target(
     ]:
         cov_rows: List[Dict[str, Any]] = []
         cov_to_eads: Dict[float, float] = {}
+        cov_to_dgads: Dict[float, float] = {}
         for cov in coverages_to_run:
-            e_ads_cov, n_keep, e_best, sample_records = _best_for_coverage(
+            e_ads_cov, dg_ads_cov, n_keep, e_best, sample_records = _best_for_coverage(
                 species=species,
                 one_ml=one_ml,
                 groups=groups,
@@ -669,20 +678,24 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 row["status"] = "skipped"
             else:
                 cov_to_eads[float(cov)] = float(e_ads_cov)
+                cov_to_dgads[float(cov)] = float(dg_ads_cov)
                 row["status"] = "ok"
                 row["E_best_eV"] = float(e_best) if e_best is not None else float("nan")
                 row["E_ads_eV_per_site"] = float(e_ads_cov)
+                row["DeltaG_ads_eV_per_site"] = float(dg_ads_cov)
             cov_rows.append(row)
 
-        if cov_to_eads:
-            # Choose minimum eV/site across successful coverages (as requested)
-            cov_star = min(cov_to_eads.items(), key=lambda kv: kv[1])[0]
+        if cov_to_dgads:
+            # Choose minimum ΔGads/site across successful coverages.
+            cov_star = min(cov_to_dgads.items(), key=lambda kv: kv[1])[0]
             e_ads_star = float(cov_to_eads[cov_star])
+            dg_ads_star = float(cov_to_dgads[cov_star])
             per_species[species] = {
                 "status": "ok",
                 "gas_energy_eV": float(e_gas),
                 "chosen_coverage": float(cov_star),
                 "chosen_E_ads_eV_per_site": float(e_ads_star),
+                "chosen_DeltaG_ads_eV_per_site": float(dg_ads_star),
                 "by_coverage": cov_rows,
             }
         else:
@@ -691,6 +704,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
                 "gas_energy_eV": float(e_gas),
                 "chosen_coverage": None,
                 "chosen_E_ads_eV_per_site": float("nan"),
+                "chosen_DeltaG_ads_eV_per_site": float("nan"),
                 "by_coverage": cov_rows,
             }
 
@@ -844,10 +858,14 @@ def calc_nanoparticle_orr_overpotential_from_target(
     with (out_path / "ORR_summary.txt").open("w") as f:
         f.write("--- ORR Summary (Nanoparticle, 1ML-subsampling) ---\n\n")
         f.write(f"E_clean = {clean_energy:.6f} eV\n")
-        f.write("\nChosen adsorption energies (eV/site):\n")
-        f.write(f"  O   : {per_species['O']['chosen_E_ads_eV_per_site']:+.6f} (cov={per_species['O']['chosen_coverage']})\n")
-        f.write(f"  OH  : {per_species['OH']['chosen_E_ads_eV_per_site']:+.6f} (cov={per_species['OH']['chosen_coverage']})\n")
-        f.write(f"  OOH : {per_species['HO2']['chosen_E_ads_eV_per_site']:+.6f} (cov={per_species['HO2']['chosen_coverage']})\n")
+        f.write("\nChosen adsorption free energies (eV/site):\n")
+        f.write(f"  O   : {per_species['O']['chosen_DeltaG_ads_eV_per_site']:+.6f} (cov={per_species['O']['chosen_coverage']})\n")
+        f.write(f"  OH  : {per_species['OH']['chosen_DeltaG_ads_eV_per_site']:+.6f} (cov={per_species['OH']['chosen_coverage']})\n")
+        f.write(f"  OOH : {per_species['HO2']['chosen_DeltaG_ads_eV_per_site']:+.6f} (cov={per_species['HO2']['chosen_coverage']})\n")
+        f.write("\nReference adsorption energies (eV/site):\n")
+        f.write(f"  O   : {per_species['O']['chosen_E_ads_eV_per_site']:+.6f}\n")
+        f.write(f"  OH  : {per_species['OH']['chosen_E_ads_eV_per_site']:+.6f}\n")
+        f.write(f"  OOH : {per_species['HO2']['chosen_E_ads_eV_per_site']:+.6f}\n")
         if can_compute:
             f.write("\nAdsorption free-energy descriptors (eV/site):\n")
             f.write(f"  ΔG_O   : {delta_g_descriptors['DeltaG_O']:+.6f}\n")
