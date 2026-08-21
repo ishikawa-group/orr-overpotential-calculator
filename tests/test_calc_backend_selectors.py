@@ -125,6 +125,70 @@ class CalcBackendSelectorTest(unittest.TestCase):
 
         self.assertIs(calls["enable_cueq"], False)
 
+    def test_d3_is_accepted_for_sevennet_and_uma(self):
+        """D3 used to be refused outright for both families.
+
+        ase_calculator_kit's policy table decides per model variant now, so a
+        7net modal or a UMA task whose reference functional carries no
+        dispersion accepts '+d3'.
+        """
+        spec = parse_calculator_spec("7net-omni_matpes_pbe+d3")
+        self.assertEqual(spec.family, "7net-omni")
+        self.assertTrue(spec.request_d3)
+
+        spec = parse_calculator_spec("uma-s-1p2_omat+d3")
+        self.assertEqual(spec.family, "uma-s-1p2")
+        self.assertTrue(spec.request_d3)
+
+    def test_d3_is_rejected_when_model_already_includes_it(self):
+        with self.assertRaises(ValueError) as ctx:
+            parse_calculator_spec("uma-s-1p2_oc25+d3")
+        self.assertIn("D3 option is not supported", str(ctx.exception))
+
+    def test_sevennet_d3_wraps_the_base_calculator(self):
+        sevenn_module = types.ModuleType("sevenn")
+        sevenn_calculator_module = types.ModuleType("sevenn.calculator")
+
+        class FakeSevenNetCalculator:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        sevenn_calculator_module.SevenNetCalculator = FakeSevenNetCalculator
+
+        mixing_module = types.ModuleType("ase.calculators.mixing")
+
+        class FakeSumCalculator:
+            def __init__(self, calculators):
+                self.calculators = calculators
+
+        mixing_module.SumCalculator = FakeSumCalculator
+
+        d3_module = types.ModuleType("torch_dftd.torch_dftd3_calculator")
+        d3_calls: dict[str, object] = {}
+
+        class FakeD3Calculator:
+            def __init__(self, **kwargs):
+                d3_calls.update(kwargs)
+
+        d3_module.TorchDFTD3Calculator = FakeD3Calculator
+
+        spec = parse_calculator_spec("7net-omni_matpes_pbe+d3")
+        patched = {
+            "sevenn": sevenn_module,
+            "sevenn.calculator": sevenn_calculator_module,
+            "ase.calculators.mixing": mixing_module,
+            "torch_dftd.torch_dftd3_calculator": d3_module,
+        }
+        with patch.dict(sys.modules, patched):
+            with patch.object(calc_backends, "get_device", return_value="cpu"):
+                setup = calc_backends._build_sevennet_omni_calculator(Atoms("H"), spec)
+
+        wrapped = setup.atoms.calc._calculator
+        self.assertIsInstance(wrapped, FakeSumCalculator)
+        self.assertIsInstance(wrapped.calculators[0], FakeSevenNetCalculator)
+        # matpes_pbe is trained on plain PBE, so PBE D3 parameters are the match.
+        self.assertEqual(d3_calls["xc"], "pbe")
+
 
 if __name__ == "__main__":
     unittest.main()

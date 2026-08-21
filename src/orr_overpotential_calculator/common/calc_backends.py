@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import inspect
 import os
 import re
 import sys
@@ -15,6 +14,7 @@ from typing import Any, Optional
 import numpy as np
 import yaml
 from ase.calculators.calculator import Calculator
+from ase_calculator_kit import get_calculator, get_dispersion_policy
 
 os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
@@ -238,8 +238,39 @@ def _supported_calculator_message() -> str:
         "Supported calculators: 'vasp', 'qe', "
         "'mace-mh1_<head>' (example: 'mace-mh1_omat_pbe' or 'mace-mh1_omat_pbe+d3'), "
         "'uma-s-1p2_<task>' with task in {omat, oc20, oc22, oc25}, "
-        "'7net-omni_<modal>' (example: '7net-omni_matpes_pbe')."
+        "'7net-omni_<modal>' (example: '7net-omni_matpes_pbe' or "
+        "'7net-omni_matpes_pbe+d3')."
     )
+
+
+#: ORR calculator family -> the ase_calculator_kit backend that owns its
+#: dispersion policy. The kit's table is keyed by (backend, discriminator),
+#: where the discriminator is the MACE head, the UMA task, or the SevenNet
+#: modal -- which is exactly this package's ``selector``.
+_KIT_BACKEND = {
+    "mace-mh1": "mace",
+    "uma-s-1p2": "uma",
+    "7net-omni": "sevennet",
+}
+
+
+def _reject_d3_already_included(family: str, selector: str) -> None:
+    """Fail at parse time for models whose reference already has dispersion.
+
+    ase_calculator_kit raises the same refusal when the calculator is built.
+    Checking here keeps the error where it used to be -- before a multi-gigabyte
+    checkpoint is loaded -- while leaving the kit as the single source of truth
+    for which models those are.
+    """
+    backend = _KIT_BACKEND.get(family)
+    if backend is None:
+        return
+    policy = get_dispersion_policy(backend, selector)
+    if policy is not None and policy.includes_dispersion:
+        raise ValueError(
+            f"D3 option is not supported for {family} '{selector}': {policy.note}. "
+            "Remove '+d3' to avoid double-counting dispersion."
+        )
 
 
 def _raise_removed_alias(alias: str) -> None:
@@ -353,13 +384,11 @@ def parse_calculator_spec(calculator: str) -> CalculatorSpec:
                 f"Unsupported UMA task selector {selector!r}. "
                 f"Use one of {sorted(UMA_TASK_STRESS_SUPPORT)}."
             )
-        if request_d3:
-            raise ValueError("D3 option is not supported for UMA calculators.")
         if cueq_mode != "auto":
             raise ValueError("cueq option is not supported for UMA calculators.")
-    elif family == "7net-omni":
-        if request_d3:
-            raise ValueError("D3 option is not supported for 7net-omni calculators.")
+
+    if request_d3:
+        _reject_d3_already_included(family, selector)
 
     return CalculatorSpec(
         raw_name=calculator,
@@ -517,17 +546,6 @@ def _build_qe_calculator(atoms, kind: str, yaml_path: Optional[str], calc_direct
     )
 
 
-def _supports_kwarg(callable_obj, key: str) -> bool:
-    try:
-        signature = inspect.signature(callable_obj)
-    except (TypeError, ValueError):
-        return False
-
-    if key in signature.parameters:
-        return True
-    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())
-
-
 def _resolve_cueq(spec: CalculatorSpec, *, default: bool) -> bool | None:
     if spec.cueq_mode == "auto":
         return default
@@ -555,28 +573,19 @@ def _default_auto_cueq_enabled() -> bool:
 
 
 def _build_mace_mh1_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
-    from mace.calculators import mace_mp
-
     kwargs: dict[str, Any] = {
         "model": MACE_MH1_MODEL_URL,
         "head": spec.selector,
-        "dispersion": bool(spec.request_d3),
         "default_dtype": "float64",
         "device": get_device(),
+        "dispersion": bool(spec.request_d3),
     }
-    if spec.request_d3:
-        kwargs["dispersion_xc"] = "pbe"
 
     cueq_value = _resolve_cueq(spec, default=False)
-    if cueq_value is not None and _supports_kwarg(mace_mp, "enable_cueq"):
+    if cueq_value is not None:
         kwargs["enable_cueq"] = cueq_value
-    elif spec.cueq_mode != "auto":
-        raise ValueError(
-            "Explicit cueq option was requested for mace-mh1, but this installed MACE version "
-            "does not expose 'enable_cueq'."
-        )
 
-    atoms.calc = ProtectedCalculator(mace_mp(**kwargs))
+    atoms.calc = ProtectedCalculator(get_calculator("mace", **kwargs))
     return CalculatorSetup(
         atoms=atoms,
         calculator_name=spec.canonical_name,
@@ -586,16 +595,16 @@ def _build_mace_mh1_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
 
 
 def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
-    from sevenn.calculator import SevenNetCalculator
-
     auto_cueq = _default_auto_cueq_enabled()
     atoms.calc = ProtectedCalculator(
-        SevenNetCalculator(
+        get_calculator(
+            "sevennet",
             model="7net-omni",
             device=get_device(),
             modal=spec.selector,
-            enable_cueq=_resolve_cueq(spec, default=auto_cueq),
+            enable_cueq=bool(_resolve_cueq(spec, default=auto_cueq)),
             enable_flash=False,
+            dispersion=bool(spec.request_d3),
         )
     )
     return CalculatorSetup(
@@ -607,13 +616,16 @@ def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSe
 
 
 def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> CalculatorSetup:
-    from fairchem.core.calculate import pretrained_mlip
-    from fairchem.core.calculate.ase_calculator import FAIRChemCalculator
-
     task_name = spec.selector or ""
-    predictor = pretrained_mlip.get_predict_unit("uma-s-1p2", device=get_device())
 
+    # An isolated atom is answered from the model's own atomic reference table
+    # rather than by running it, so this branch needs the predict unit itself,
+    # which the factory does not hand back. Everything else goes through the
+    # factory; the predict unit is fetched only for this case.
     if kind == "gas" and len(atoms) == 1:
+        from fairchem.core.calculate import pretrained_mlip
+
+        predictor = pretrained_mlip.get_predict_unit("uma-s-1p2", device=get_device())
         ref_energy = _lookup_atom_reference(
             predictor.atom_refs,
             task_name,
@@ -630,8 +642,15 @@ def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> Calcu
                 supports_stress=True,
             )
 
-    fairchem_calculator = FAIRChemCalculator(predictor, task_name=task_name)
-    atoms.calc = ProtectedCalculator(fairchem_calculator)
+    atoms.calc = ProtectedCalculator(
+        get_calculator(
+            "uma",
+            model="uma-s-1p2",
+            task=task_name,
+            device=get_device(),
+            dispersion=bool(spec.request_d3),
+        )
+    )
     if kind == "gas":
         atoms.set_pbc(False)
 
