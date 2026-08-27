@@ -596,6 +596,11 @@ def _build_mace_mh1_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
 
 def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
     auto_cueq = _default_auto_cueq_enabled()
+    sevennet_kwargs = {}
+    if spec.request_d3:
+        damping = _d3_damping_for("sevennet", spec.selector)
+        if damping is not None:
+            sevennet_kwargs["dispersion_damping"] = damping
     atoms.calc = ProtectedCalculator(
         get_calculator(
             "sevennet",
@@ -605,6 +610,7 @@ def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSe
             enable_cueq=bool(_resolve_cueq(spec, default=auto_cueq)),
             enable_flash=False,
             dispersion=bool(spec.request_d3),
+            **sevennet_kwargs,
         )
     )
     return CalculatorSetup(
@@ -642,6 +648,11 @@ def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> Calcu
                 supports_stress=True,
             )
 
+    uma_kwargs = {}
+    if spec.request_d3:
+        damping = _d3_damping_for("uma", task_name)
+        if damping is not None:
+            uma_kwargs["dispersion_damping"] = damping
     atoms.calc = ProtectedCalculator(
         get_calculator(
             "uma",
@@ -649,6 +660,7 @@ def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> Calcu
             task=task_name,
             device=get_device(),
             dispersion=bool(spec.request_d3),
+            **uma_kwargs,
         )
     )
     if kind == "gas":
@@ -660,6 +672,27 @@ def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> Calcu
         uses_ase_optimizer=True,
         supports_stress=UMA_TASK_STRESS_SUPPORT[task_name],
     )
+
+
+def _d3_damping_for(backend: str, policy_key: str) -> str | None:
+    """Damping to pair with this model's own functional.
+
+    D3's two damping functions are not interchangeable per functional. RPBE's
+    Becke-Johnson parameters carry a1 = 0.182 against PBE-BJ's 0.4289, which
+    leaves the damping open down to nearest-neighbour metal distances: on a
+    Pt309 cuboctahedron RPBE-BJ gives -1008 eV of dispersion where RPBE-zero
+    gives -215, and the part that survives the clean-minus-covered subtraction
+    is 0.19 eV per O or OH and 0.34 eV per OOH. Because it differs by species
+    it does not cancel out of an ORR step either.
+
+    The kit defaults to BJ for every functional, so an RPBE model asked for
+    "+d3" was silently getting the unusable pairing. Returning None keeps the
+    kit default, which is correct for the PBE family.
+    """
+    policy = get_dispersion_policy(backend, policy_key)
+    if policy is not None and policy.d3_xc == "rpbe":
+        return "zero"
+    return None
 
 
 def build_nnp_calculator(atoms, kind: str, spec: CalculatorSpec) -> CalculatorSetup:
