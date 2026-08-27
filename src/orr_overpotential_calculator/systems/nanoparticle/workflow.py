@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
+import warnings
+
 import numpy as np
 from ase import Atoms
 from ase.io import read as ase_read
@@ -47,11 +49,25 @@ def _np_diameter(atoms: Atoms) -> float:
     return float(np.max(span))
 
 
+#: Longest cutoff anything downstream uses. torch-dftd's D3 reaches 14 A, well
+#: past the 5-6 A an NNP sees, so this is what decides whether a cell is big
+#: enough for the particle to behave as isolated.
+MIN_IMAGE_GAP_A = 14.0
+
+
 def _ensure_cluster_cell(atoms: Atoms, *, gas_box: float) -> Atoms:
     out = atoms.copy()
     out.set_cell([gas_box, gas_box, gas_box])
     out.set_pbc(True)
     out.center()
+    span = float(np.max(out.get_positions().max(axis=0) - out.get_positions().min(axis=0)))
+    gap = gas_box - span
+    if gap < MIN_IMAGE_GAP_A:
+        warnings.warn(
+            f"cell {gas_box:.2f} A leaves {gap:.2f} A between periodic images of a "
+            f"structure spanning {span:.2f} A, inside the {MIN_IMAGE_GAP_A:.0f} A "
+            "cutoff a D3 correction uses. Raise vacuum_size.",
+            RuntimeWarning, stacklevel=2)
     return out
 
 
@@ -295,6 +311,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
     vasp_yaml_path: str | None = None,
     solvent_correction_yaml_path: str | None = None,
     vacuum_size: float = 8.0,
+    cell_size: float | None = None,
     random_seed: int = 0,
     opt_fmax: float = 0.05,
 ) -> Dict[str, Any]:
@@ -336,12 +353,13 @@ def calc_nanoparticle_orr_overpotential_from_target(
     _validate_clean_prefix(clean_in, ooh_1ml_in, label="OOH_1ML_nanoparticle")
 
     diameter = max(_np_diameter(clean_in), _np_diameter(o_1ml_in), _np_diameter(oh_1ml_in), _np_diameter(ooh_1ml_in))
-    # NOTE: vacuum_size is the TOTAL padding here, not the per-side vacuum that
-    # ase.Atoms.center(vacuum=...) applies. vacuum_size=8 leaves 4 A on each
-    # side, where center(vacuum=8) would leave 8. The two conventions meet in
-    # this pipeline -- steps 00 and 01 use center(), this step uses the line
-    # below -- so a single "8.0" produces different cells at different stages.
-    gas_box = float(diameter) + float(vacuum_size)
+    # vacuum_size is the vacuum on EACH side, matching ase's
+    # Atoms.center(vacuum=...). diameter is the largest bounding box over the
+    # clean particle and all three 1ML structures, so every structure in this
+    # run shares one cell and the adsorption energies are differences taken at
+    # a fixed basis and a fixed image separation.
+    gas_box = (float(cell_size) if cell_size
+               else float(diameter) + 2.0 * float(vacuum_size))
 
     # ------------------------------------------------------------------
     # 1) Relax clean nanoparticle
@@ -836,6 +854,7 @@ def calc_nanoparticle_orr_overpotential_from_target(
         "vasp_yaml_path": vasp_yaml_path,
         "solvent_correction_yaml_path": solvent_correction_yaml_path,
         "vacuum_size_A": float(vacuum_size),
+        "cell_size_A": float(gas_box),
         "gas_box_A": float(gas_box),
         "random_seed": int(random_seed),
         "clean_relaxation": {"optimizer": str(clean_optimizer_used)},

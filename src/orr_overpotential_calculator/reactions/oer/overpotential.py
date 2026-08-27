@@ -719,6 +719,7 @@ def calc_cluster_oer_overpotential(
         vasp_yaml_path: str = None,
         solvent_correction_yaml_path: str = None,
         vacuum_size: float = 20.0,
+        cell_size: float | None = None,
     ) -> Dict[str, Any]:
     """
     Calculate OER overpotential for cluster systems.
@@ -732,7 +733,8 @@ def calc_cluster_oer_overpotential(
         adsorbates: Dictionary of atomic indices for adsorption sites
         vasp_yaml_path: Path to configuration file
         solvent_correction_yaml_path: Path to solvent correction YAML file
-        vacuum_size: Vacuum size around cluster (Å)
+        vacuum_size: Vacuum on each side of the cluster (Å); the cell
+            edge is cluster_diameter + 2 * vacuum_size.
         
     Returns:
         Dictionary containing overpotential and thermodynamic data
@@ -760,7 +762,13 @@ def calc_cluster_oer_overpotential(
     y_size = positions[:, 1].max() - positions[:, 1].min()
     z_size = positions[:, 2].max() - positions[:, 2].min()
     cluster_diameter = max(x_size, y_size, z_size)
-    gas_box = cluster_diameter + vacuum_size
+    # vacuum_size is the vacuum on EACH side, the same meaning ase's
+    # Atoms.center(vacuum=...) has. It used to be the total padding, so the same
+    # number produced half the vacuum it reads as, and a nanoparticle sized on
+    # its clean structure ended up with periodic images 8.6 A apart -- inside
+    # the 14 A cutoff a D3 correction uses.
+    gas_box = (float(cell_size) if cell_size
+               else cluster_diameter + 2.0 * vacuum_size)
 
     optimized_cluster, cluster_energy = optimize_cluster_structure(
         cluster, gas_box, str(outdir_path / "cluster"), calculator, vasp_yaml_path
