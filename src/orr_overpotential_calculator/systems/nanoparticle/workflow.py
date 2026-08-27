@@ -336,6 +336,11 @@ def calc_nanoparticle_orr_overpotential_from_target(
     _validate_clean_prefix(clean_in, ooh_1ml_in, label="OOH_1ML_nanoparticle")
 
     diameter = max(_np_diameter(clean_in), _np_diameter(o_1ml_in), _np_diameter(oh_1ml_in), _np_diameter(ooh_1ml_in))
+    # NOTE: vacuum_size is the TOTAL padding here, not the per-side vacuum that
+    # ase.Atoms.center(vacuum=...) applies. vacuum_size=8 leaves 4 A on each
+    # side, where center(vacuum=8) would leave 8. The two conventions meet in
+    # this pipeline -- steps 00 and 01 use center(), this step uses the line
+    # below -- so a single "8.0" produces different cells at different stages.
     gas_box = float(diameter) + float(vacuum_size)
 
     # ------------------------------------------------------------------
