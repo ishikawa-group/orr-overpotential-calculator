@@ -20,7 +20,12 @@ os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="scipy")
 
 SUPPORTED_DFT_CALCULATORS = {"vasp", "qe"}
-SUPPORTED_NNP_FAMILIES = {"mace-mh1", "uma-s-1p2", "7net-omni"}
+#: UMA checkpoints are named individually rather than aliased, so a spec
+#: always says which one it used. uma-s-1p2p1 is the current default and
+#: uma-s-1p2 stays selectable so the earlier campaigns reproduce.
+UMA_FAMILIES = ("uma-s-1p2p1", "uma-s-1p2")
+DEFAULT_UMA_FAMILY = UMA_FAMILIES[0]
+SUPPORTED_NNP_FAMILIES = {"mace-mh1", *UMA_FAMILIES, "7net-omni"}
 REMOVED_NNP_ALIASES = {
     "mace",
     "mace-mh",
@@ -250,6 +255,7 @@ def _supported_calculator_message() -> str:
 _KIT_BACKEND = {
     "mace-mh1": "mace",
     "uma-s-1p2": "uma",
+    "uma-s-1p2p1": "uma",
     "7net-omni": "sevennet",
 }
 
@@ -378,7 +384,7 @@ def parse_calculator_spec(calculator: str) -> CalculatorSpec:
                 "D3 requested with '+d3', but the selected MACE head already indicates dispersion. "
                 "Remove '+d3' to avoid double-counting dispersion."
             )
-    elif family == "uma-s-1p2":
+    elif family in UMA_FAMILIES:
         if selector not in UMA_TASK_STRESS_SUPPORT:
             raise ValueError(
                 f"Unsupported UMA task selector {selector!r}. "
@@ -414,8 +420,8 @@ def normalize_calculator_name(calculator: str) -> tuple[str, dict[str, str]]:
     if spec.family == "mace-mh1":
         extra["mace_model"] = "mace-mh1"
         extra["mace_head"] = spec.selector or ""
-    elif spec.family == "uma-s-1p2":
-        extra["uma_model"] = "uma-s-1p2"
+    elif spec.family in UMA_FAMILIES:
+        extra["uma_model"] = spec.family
         extra["uma_task"] = spec.selector or ""
     elif spec.family == "7net-omni":
         extra["sevenn_model"] = "7net-omni"
@@ -430,7 +436,7 @@ def supports_stress(calculator: str) -> bool:
 
     if spec.family in {"vasp", "qe", "mace-mh1", "7net-omni"}:
         return True
-    if spec.family == "uma-s-1p2":
+    if spec.family in UMA_FAMILIES:
         return UMA_TASK_STRESS_SUPPORT[spec.selector or ""]
     raise ValueError(f"Unsupported calculator: {calculator!r}")
 
@@ -621,7 +627,13 @@ def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSe
     )
 
 
-def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> CalculatorSetup:
+def _build_uma_calculator(atoms, kind: str, spec: CalculatorSpec) -> CalculatorSetup:
+    """Build whichever UMA checkpoint the spec names.
+
+    The family is the checkpoint, so uma-s-1p2p1_oc20 and uma-s-1p2_oc20 differ
+    only in which weights load. Reading it off the spec rather than hardcoding
+    one keeps a result traceable to the checkpoint that produced it.
+    """
     task_name = spec.selector or ""
 
     # An isolated atom is answered from the model's own atomic reference table
@@ -631,7 +643,7 @@ def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> Calcu
     if kind == "gas" and len(atoms) == 1:
         from fairchem.core.calculate import pretrained_mlip
 
-        predictor = pretrained_mlip.get_predict_unit("uma-s-1p2", device=get_device())
+        predictor = pretrained_mlip.get_predict_unit(spec.family, device=get_device())
         ref_energy = _lookup_atom_reference(
             predictor.atom_refs,
             task_name,
@@ -656,7 +668,7 @@ def _build_uma_s_1p2_calculator(atoms, kind: str, spec: CalculatorSpec) -> Calcu
     atoms.calc = ProtectedCalculator(
         get_calculator(
             "uma",
-            model="uma-s-1p2",
+            model=spec.family,
             task=task_name,
             device=get_device(),
             dispersion=bool(spec.request_d3),
@@ -701,8 +713,8 @@ def build_nnp_calculator(atoms, kind: str, spec: CalculatorSpec) -> CalculatorSe
         return _build_mace_mh1_calculator(atoms, spec)
     if spec.family == "7net-omni":
         return _build_sevennet_omni_calculator(atoms, spec)
-    if spec.family == "uma-s-1p2":
-        return _build_uma_s_1p2_calculator(atoms, kind, spec)
+    if spec.family in UMA_FAMILIES:
+        return _build_uma_calculator(atoms, kind, spec)
     raise ValueError(f"Unsupported NNP calculator family: {spec.family!r}")
 
 
