@@ -597,7 +597,10 @@ def create_oer_volcano_plot(
     df["dG_O"] = df["dE_O"] + delta_zpe_o - delta_TS_o
 
     # Set font size
-    plt.rcParams.update({'font.size': 12})
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.sans-serif'] = ['Nimbus Sans', 'Helvetica', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    plt.rcParams['font.size'] = 14
 
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
@@ -831,7 +834,10 @@ def create_trend_plot(
     df[y_col] = y_values
     
     # Set font size
-    plt.rcParams.update({'font.size': 12})
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.sans-serif'] = ['Nimbus Sans', 'Helvetica', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False
+    plt.rcParams['font.size'] = 14
     
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
