@@ -65,6 +65,7 @@ class CalculatorSpec:
     selector: str | None = None
     request_d3: bool = False
     cueq_mode: str = "auto"
+    request_flash: bool = False
 
     @property
     def canonical_name(self) -> str:
@@ -77,6 +78,8 @@ class CalculatorSpec:
             options.append("d3")
         if self.cueq_mode != "auto":
             options.append(f"cueq={self.cueq_mode}")
+        if self.request_flash:
+            options.append("flash")
         if options:
             canonical = f"{canonical}+{'+'.join(options)}"
         return canonical
@@ -302,7 +305,7 @@ def _parse_cueq_mode(token: str) -> str:
     return mode
 
 
-def _parse_options(calculator: str) -> tuple[str, bool, str]:
+def _parse_options(calculator: str) -> tuple[str, bool, str, bool]:
     chunks = [part.strip().lower() for part in calculator.split("+") if part.strip()]
     if not chunks:
         raise ValueError("Calculator name cannot be empty.")
@@ -310,10 +313,14 @@ def _parse_options(calculator: str) -> tuple[str, bool, str]:
     base = chunks[0]
     request_d3 = False
     cueq_mode = "auto"
+    request_flash = False
 
     for option in chunks[1:]:
         if option == "d3":
             request_d3 = True
+            continue
+        if option == "flash":
+            request_flash = True
             continue
         if option in {"cueq", "cueq=true"}:
             cueq_mode = "true"
@@ -326,10 +333,10 @@ def _parse_options(calculator: str) -> tuple[str, bool, str]:
             continue
         raise ValueError(
             f"Unsupported calculator option {option!r}. "
-            "Supported options are '+d3' and '+cueq=<auto|true|false>'."
+            "Supported options are '+d3', '+flash' and '+cueq=<auto|true|false>'."
         )
 
-    return base, request_d3, cueq_mode
+    return base, request_d3, cueq_mode, request_flash
 
 
 def _selector_includes_dispersion(selector: str) -> bool:
@@ -342,7 +349,7 @@ def parse_calculator_spec(calculator: str) -> CalculatorSpec:
         raise ValueError(f"Empty calculator string. {_supported_calculator_message()}")
 
     _raise_removed_alias(normalized)
-    base, request_d3, cueq_mode = _parse_options(normalized)
+    base, request_d3, cueq_mode, request_flash = _parse_options(normalized)
     _raise_removed_alias(base)
 
     if "_" in base:
@@ -363,6 +370,8 @@ def parse_calculator_spec(calculator: str) -> CalculatorSpec:
             )
         if cueq_mode != "auto":
             raise ValueError(f"cueq option is not supported for DFT calculator {family!r}.")
+        if request_flash:
+            raise ValueError(f"flash option is not supported for DFT calculator {family!r}.")
         return CalculatorSpec(raw_name=calculator, family=family)
 
     if family not in SUPPORTED_NNP_FAMILIES:
@@ -393,6 +402,12 @@ def parse_calculator_spec(calculator: str) -> CalculatorSpec:
         if cueq_mode != "auto":
             raise ValueError("cueq option is not supported for UMA calculators.")
 
+    if request_flash:
+        if family != "7net-omni":
+            raise ValueError("'+flash' (FlashTP) applies to 7net-omni only.")
+        if cueq_mode == "true":
+            raise ValueError("'+flash' and '+cueq=true' are exclusive: sevenn takes one accelerator.")
+
     if request_d3:
         _reject_d3_already_included(family, selector)
 
@@ -402,6 +417,7 @@ def parse_calculator_spec(calculator: str) -> CalculatorSpec:
         selector=selector,
         request_d3=request_d3,
         cueq_mode=cueq_mode,
+        request_flash=request_flash,
     )
 
 
@@ -600,25 +616,38 @@ def _build_mace_mh1_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
     )
 
 
+#: One model instance per (spec, device). The nanoparticle workflow relaxes
+#: dozens of structures with the same spec, and rebuilding SevenNet each time
+#: reloads the checkpoint and re-initialises FlashTP/cuEquivariance kernels for
+#: every structure. ASE calculators re-evaluate whenever the atoms differ from
+#: the cached ones, so sharing the instance cannot hand back stale results.
+_SEVENNET_CACHE: dict[tuple[str, str], Any] = {}
+
+
 def _build_sevennet_omni_calculator(atoms, spec: CalculatorSpec) -> CalculatorSetup:
-    auto_cueq = _default_auto_cueq_enabled()
-    sevennet_kwargs = {}
-    if spec.request_d3:
-        damping = _d3_damping_for("sevennet", spec.selector)
-        if damping is not None:
-            sevennet_kwargs["dispersion_damping"] = damping
-    atoms.calc = ProtectedCalculator(
-        get_calculator(
+    device = get_device()
+    key = (spec.canonical_name, device)
+    calc = _SEVENNET_CACHE.get(key)
+    if calc is None:
+        flash = bool(spec.request_flash)
+        auto_cueq = False if flash else _default_auto_cueq_enabled()
+        sevennet_kwargs = {}
+        if spec.request_d3:
+            damping = _d3_damping_for("sevennet", spec.selector)
+            if damping is not None:
+                sevennet_kwargs["dispersion_damping"] = damping
+        calc = get_calculator(
             "sevennet",
             model="7net-omni",
-            device=get_device(),
+            device=device,
             modal=spec.selector,
-            enable_cueq=bool(_resolve_cueq(spec, default=auto_cueq)),
-            enable_flash=False,
+            enable_cueq=False if flash else bool(_resolve_cueq(spec, default=auto_cueq)),
+            enable_flash=flash,
             dispersion=bool(spec.request_d3),
             **sevennet_kwargs,
         )
-    )
+        _SEVENNET_CACHE[key] = calc
+    atoms.calc = ProtectedCalculator(calc)
     return CalculatorSetup(
         atoms=atoms,
         calculator_name=spec.canonical_name,

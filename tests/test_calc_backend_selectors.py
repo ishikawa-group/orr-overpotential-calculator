@@ -22,6 +22,9 @@ from orr_overpotential_calculator.common.calc_backends import (
 
 
 class CalcBackendSelectorTest(unittest.TestCase):
+    def setUp(self):
+        calc_backends._SEVENNET_CACHE.clear()
+
     def test_normalize_7net_omni_selector(self):
         family, extra = normalize_calculator_name("7net-omni_matpes_pbe")
         self.assertEqual(family, "7net-omni")
@@ -192,3 +195,57 @@ class CalcBackendSelectorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FlashOptionTest(unittest.TestCase):
+    def setUp(self):
+        calc_backends._SEVENNET_CACHE.clear()
+
+    def test_flash_option_round_trips_through_the_canonical_name(self):
+        spec = parse_calculator_spec("7net-omni_matpes_pbe+d3+flash")
+        self.assertTrue(spec.request_flash)
+        self.assertTrue(spec.request_d3)
+        self.assertEqual(spec.canonical_name, "7net-omni_matpes_pbe+d3+flash")
+
+    def test_flash_is_refused_outside_sevennet(self):
+        with self.assertRaises(ValueError):
+            parse_calculator_spec("uma-s-1p2p1_oc20+flash")
+        with self.assertRaises(ValueError):
+            parse_calculator_spec("7net-omni_matpes_pbe+flash+cueq=true")
+
+    def test_flash_spec_forwards_flash_turns_cueq_off_and_is_cached(self):
+        calls: list[dict] = []
+        sevenn_module = types.ModuleType("sevenn")
+        sevenn_calculator_module = types.ModuleType("sevenn.calculator")
+
+        class IrrepsScatterGatterFusedConvolution:
+            pass
+
+        class FakeModel:
+            def modules(self):
+                yield IrrepsScatterGatterFusedConvolution()
+
+        class FakeSevenNetCalculator:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+                self.model = FakeModel()
+
+        sevenn_calculator_module.SevenNetCalculator = FakeSevenNetCalculator
+        spec = parse_calculator_spec("7net-omni_matpes_pbe+flash")
+        modules = {
+            "sevenn": sevenn_module,
+            "sevenn.calculator": sevenn_calculator_module,
+            "flashTP_e3nn": types.ModuleType("flashTP_e3nn"),
+        }
+        with patch.dict(sys.modules, modules):
+            with patch.object(calc_backends, "get_device", return_value="cuda"):
+                with patch.object(calc_backends, "_cueq_runtime_available", return_value=True):
+                    first = Atoms("H")
+                    second = Atoms("H")
+                    calc_backends._build_sevennet_omni_calculator(first, spec)
+                    calc_backends._build_sevennet_omni_calculator(second, spec)
+
+        self.assertEqual(len(calls), 1, "the model must be built once per spec")
+        self.assertIs(calls[0]["enable_flash"], True)
+        self.assertIs(calls[0]["enable_cueq"], False)
+        self.assertIs(first.calc._calculator, second.calc._calculator)

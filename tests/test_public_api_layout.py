@@ -15,7 +15,7 @@ class PublicApiLayoutTest(unittest.TestCase):
     def test_root_package_is_minimal(self):
         import orr_overpotential_calculator as api
 
-        self.assertEqual(api.__version__, "0.2.0")
+        self.assertEqual(api.__version__, "0.3.0")
         self.assertFalse(hasattr(api, "calc_orr_overpotential"))
         self.assertFalse(hasattr(api, "calc_nanoparticle_orr_overpotential_from_target"))
 
